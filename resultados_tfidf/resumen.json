@@ -1,0 +1,34 @@
+{
+  "sklearn_version": "1.8.0",
+  "configuracion": {
+    "datos": ".",
+    "salida": "resultados_tfidf",
+    "test_size": 0.2,
+    "seed": 42,
+    "ngramas": 1,
+    "min_df": 3,
+    "max_df": 1.0,
+    "max_features": null,
+    "sublinear_tf": false
+  },
+  "usuarios": 600,
+  "publicaciones_totales": 291787,
+  "publicaciones_utiles": 291778,
+  "dimensiones": 37246,
+  "train": {
+    "shape": [
+      480,
+      37246
+    ],
+    "nnz": 842989,
+    "usuarios_vector_cero": []
+  },
+  "test": {
+    "shape": [
+      120,
+      37246
+    ],
+    "nnz": 200058,
+    "usuarios_vector_cero": []
+  }
+}

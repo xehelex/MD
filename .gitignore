@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Entornos virtuales (cada uno crea el suyo, los README lo explican)
+.venv/
+venv/
+env/
+
+# Editores
+.idea/
+.vscode/
+
+# Basura del sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Salidas del preprocesador: se regeneran ejecutandolo y son enormes
+output/
+
+# Informe de validacion: lo rehace python -m Clustering_jerarquico.validacion
+resultados_clustering/validacion.html
+
+# Los XML de CLEF NO van al repo. Se descargan aparte y se dejan en local.
+data_*/
+subject*.xml
+*.zip

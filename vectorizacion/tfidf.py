@@ -1,6 +1,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+import html
 from pathlib import Path
 import re
 import xml.etree.ElementTree as ET
@@ -19,12 +20,31 @@ class Historial:
     publicaciones_totales: int
 
 
+def reparar_entidades(texto: str) -> str:
+    """Reconstruye las entidades HTML que el corpus trae rotas.
+
+    Los XML de CLEF llegan con "don #8217;t" donde deberia poner "don't": se
+    perdio el & de &#8217; y ademas se colo un espacio. Son unas 43.000 palabras
+    partidas en los 600 primeros sujetos, entre negaciones, posesivos y formas
+    como I'm o I've. Si no se arregla aqui, el tokenizador produce basura del
+    tipo "don" + "8217" + "t" y, lo que es peor, las negaciones se pierden.
+
+    Exige el punto y coma final, asi que no toca "C#", "issue #123" ni "100 #5".
+    """
+    texto = re.sub(r"\s?#(\d{2,6});", r"&#\1;", texto)
+    texto = re.sub(r"(?<![&\w])\s?(amp|quot|gt|lt|nbsp);", r"&\1;", texto)
+    return html.unescape(texto)
+
+
 def limpiar_texto(texto: str) -> str:
     """Recibe texto XML decodificado; devuelve texto sin URLs ni menciones reales.
 
     Conserva negaciones, cifras y puntuación; no requiere recursos de NLTK.
     El tokenizador posterior selecciona los términos para TF-IDF.
     """
+    # Primero de todo: sin esto, las sustituciones de negaciones de abajo no
+    # llegan a dispararse nunca, porque el texto real dice "don #8217;t".
+    texto = reparar_entidades(texto)
     texto = re.sub(r"https?://\S+|www\.\S+", " URLTOKEN ", texto, flags=re.I)
     texto = re.sub(r"(?<!\w)(?:/?u/|@)[\w-]+", " USERTOKEN ", texto)
     # Evita que el tokenizador de palabras pierda la negación de can't/don't.
@@ -93,6 +113,35 @@ class TfidfPorUsuario(TfidfVectorizer):
         return analizar_usuario
 
 
+# Palabras que NO se eliminan aunque esten en la lista de vacias. Sin ellas
+# "no quiero morir" y "quiero morir" llegan identicas al clustering, que para
+# esta tarea es justo la distincion que importa.
+NEGACIONES = frozenset({
+    "not", "no", "never", "none", "nobody", "nothing", "nowhere",
+    "neither", "nor", "cannot", "without", "against",
+})
+
+
+def palabras_vacias_sin_negaciones() -> list[str]:
+    """Lista de stopwords inglesas de NLTK, menos las que niegan.
+
+    Se importa aqui dentro y no arriba para que el modulo siga funcionando sin
+    NLTK instalado mientras no se pidan stopwords. La resta de conjuntos no
+    necesita saber que hay en la lista: lo que no este, no se quita.
+    """
+    from nltk.corpus import stopwords
+
+    try:
+        vacias = set(stopwords.words("english"))
+    except LookupError:  # el corpus no esta descargado todavia
+        import nltk
+
+        nltk.download("stopwords", quiet=True, raise_on_error=True)
+        vacias = set(stopwords.words("english"))
+
+    return sorted(vacias - NEGACIONES)
+
+
 def crear_vectorizador(
     ngramas: int = 1,
     min_df: int = 3,
@@ -100,6 +149,7 @@ def crear_vectorizador(
     max_features: int | None = None,
     sublinear_tf: bool = False,
     representacion: str = "palabras",
+    quitar_vacias: bool = False,
 ) -> TfidfPorUsuario:
     """Crea un vectorizador sin ajustar, con los valores base de SAD_Plantilla.
 
@@ -116,6 +166,8 @@ def crear_vectorizador(
         raise ValueError("representacion debe ser 'palabras' o 'caracteres4'.")
     if representacion == "caracteres4" and ngramas != 1:
         raise ValueError("ngramas solo configura palabras; caracteres4 tiene longitud fija 4.")
+    if quitar_vacias and representacion == "caracteres4":
+        raise ValueError("Las palabras vacias no se pueden filtrar sobre n-gramas de caracteres.")
     return TfidfPorUsuario(
         analyzer="char" if representacion == "caracteres4" else "word",
         ngram_range=(4, 4) if representacion == "caracteres4" else (1, ngramas),
@@ -124,6 +176,6 @@ def crear_vectorizador(
         max_features=max_features,
         sublinear_tf=sublinear_tf,
         norm="l2",
-        stop_words=None,
+        stop_words=palabras_vacias_sin_negaciones() if quitar_vacias else None,
         dtype=np.float32,
     )

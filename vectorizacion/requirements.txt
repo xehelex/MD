@@ -2,3 +2,6 @@ numpy>=1.24
 scipy>=1.10
 scikit-learn>=1.3
 joblib>=1.3
+
+# Solo hace falta si se usa --quitar-vacias
+nltk>=3.8

@@ -30,11 +30,15 @@ def main():
     parser.add_argument("--max-df", type=float, default=1.0)
     parser.add_argument("--max-features", type=int)
     parser.add_argument("--sublinear-tf", action="store_true")
+    parser.add_argument("--quitar-vacias", action="store_true",
+                        help="Filtra las palabras vacias inglesas (NLTK), conservando las negaciones.")
     args = parser.parse_args()
     if not 0 < args.test_size < 1:
         parser.error("--test-size debe estar entre 0 y 1.")
     if args.representacion == "caracteres4" and args.ngramas != 1:
         parser.error("No uses --ngramas con caracteres4: su longitud ya está fijada en 4.")
+    if args.representacion == "caracteres4" and args.quitar_vacias:
+        parser.error("--quitar-vacias no aplica a caracteres4: ahí no hay palabras que filtrar.")
     if args.salida.exists() and (not args.salida.is_dir() or any(args.salida.iterdir())):
         parser.error("La salida debe ser una carpeta nueva o vacía.")
 
@@ -49,7 +53,7 @@ def main():
 
     vectorizador = crear_vectorizador(
         args.ngramas, args.min_df, args.max_df, args.max_features, args.sublinear_tf,
-        representacion=args.representacion,
+        representacion=args.representacion, quitar_vacias=args.quitar_vacias,
     )
     x_train = vectorizador.fit_transform([u.publicaciones for u in train])
     x_test = vectorizador.transform([u.publicaciones for u in test])

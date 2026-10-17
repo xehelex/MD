@@ -7,7 +7,20 @@ import joblib
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 
-from .tfidf import crear_vectorizador
+from .tfidf import crear_vectorizador, limpiar_texto, reparar_entidades
+
+
+class TestEntidadesRotas(unittest.TestCase):
+    def test_recupera_las_negaciones(self):
+        # El corpus trae "don #8217;t"; sin reparar, la sustitucion de n't no
+        # llega a dispararse y el "not" se pierde.
+        self.assertEqual(limpiar_texto("I don #8217;t like it"), "I do not like it")
+        self.assertEqual(limpiar_texto("I can #8217;t sleep"), "I cannot sleep")
+
+    def test_no_toca_las_almohadillas_legitimas(self):
+        for texto in ("issue #123 abierto", "C# y F#", "precio 100 #5"):
+            with self.subTest(texto=texto):
+                self.assertEqual(reparar_entidades(texto), texto)
 
 
 class TestTfidf(unittest.TestCase):

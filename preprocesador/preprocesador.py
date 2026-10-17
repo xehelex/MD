@@ -74,8 +74,8 @@ class Preprocesador:
         if not df_data.empty:
             df_data["date"] = pd.to_datetime(df_data["date"], errors='coerce')
 
-        if not os.path.exists('./output'):
-            os.makedirs('./output')
+        if not os.path.exists('output'):
+            os.makedirs('output')
         df_data.to_csv('output/data.csv', index=False)
 
         return df_data
@@ -215,19 +215,10 @@ class Preprocesador:
         return data
 
     def preprocesar_datos_clustering(self):
-        #TODO cambiar lo del directorio por un arg
-        self.df_original = self._cargar_data(self.args["data"])
+        self.df_original = self._cargar_data(self.args["datos"])
         self.df = self.df_original.copy()
         self.df = self._pipeline_limpieza_texto(self.df)
 
         return self.df
 
     #endregion
-
-# Para pruebas
-if __name__ == '__main__':
-    argus = {"data": "C:\\Users\\shama\\OneDrive\\Escritorio\\data_1_to_600\\auxiliar"} # TODO para pruebas IMPORTANTE CAMBIAR VUESTRA RUTA
-    prepro = Preprocesador(argus)
-
-    df = prepro.preprocesar_datos_clustering()
-    df.to_csv('output/data_prepro.csv', index=False)

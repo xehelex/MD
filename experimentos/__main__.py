@@ -22,7 +22,7 @@ COMBINACIONES = [
 
 COLUMNAS = ["matriz", "enlace", "distancia", "k", "silhouette", "equilibrio",
             "mayor_pct", "grupos_utiles", "instancias_sueltas", "tamanos",
-            "cofenetica", "segundos_arbol"]
+            "estabilidad", "cofenetica", "segundos_arbol"]
 
 
 def main():
@@ -34,6 +34,9 @@ def main():
     parser.add_argument("--k-max", type=int, default=20)
     parser.add_argument("--minimo", type=int, default=10,
                         help="Tamaño a partir del cual un grupo cuenta como aprovechable.")
+    parser.add_argument("--estabilidad", type=int, default=0, metavar="N",
+                        help="Repeticiones de remuestreo al 80%% para medir estabilidad. "
+                             "0 la desactiva; cada repetición reconstruye todos los árboles.")
     args = parser.parse_args()
 
     if not 2 <= args.k_min <= args.k_max:
@@ -47,7 +50,8 @@ def main():
         matrices[carpeta.name] = load_npz(archivo).tocsr()
 
     ks = list(range(args.k_min, args.k_max + 1))
-    filas = recorrer_rejilla(matrices, COMBINACIONES, ks, minimo=args.minimo)
+    filas = recorrer_rejilla(matrices, COMBINACIONES, ks, minimo=args.minimo,
+                             repeticiones=args.estabilidad)
 
     args.salida.mkdir(parents=True, exist_ok=True)
     with (args.salida / "rejilla.csv").open("w", newline="", encoding="utf-8") as f:
@@ -68,9 +72,13 @@ def main():
     # Por pantalla, solo lo que se mira de un vistazo: el mejor k de cada
     # combinacion segun silhouette, con su equilibrio al lado para que se vea
     # si esa eleccion tiene sentido o es una particion degenerada.
-    print("%-34s %-9s %-10s %3s %10s %10s %8s" % (
-        "matriz", "enlace", "distancia", "k", "silhouette", "equilibrio", "mayor%"))
-    print("-" * 92)
+    cabecera = ["matriz", "enlace", "distancia", "k", "silhouette", "equilibrio", "mayor%"]
+    plantilla = "%-34s %-9s %-10s %3s %10s %10s %8s"
+    if args.estabilidad:
+        cabecera.append("estabil.")
+        plantilla += " %9s"
+    print(plantilla % tuple(cabecera))
+    print("-" * (102 if args.estabilidad else 92))
     for nombre in matrices:
         for enlace, distancia, _ in COMBINACIONES:
             candidatas = [f for f in filas if f["matriz"] == nombre
@@ -78,9 +86,13 @@ def main():
             if not candidatas:
                 continue
             mejor = max(candidatas, key=lambda f: f["silhouette"] if f["silhouette"] == f["silhouette"] else -1e9)
-            print("%-34s %-9s %-10s %3d %10.3f %10.3f %7.1f%%" % (
-                nombre[:34], enlace, distancia, mejor["k"],
-                mejor["silhouette"], mejor["equilibrio"], mejor["mayor_pct"]))
+            valores = [nombre[:34], enlace, distancia, mejor["k"],
+                       mejor["silhouette"], mejor["equilibrio"], mejor["mayor_pct"]]
+            linea = "%-34s %-9s %-10s %3d %10.3f %10.3f %7.1f%%"
+            if args.estabilidad:
+                valores.append(mejor["estabilidad"])
+                linea += " %9.3f"
+            print(linea % tuple(valores))
         print()
 
     r = resumen["correlacion_silhouette_equilibrio"]

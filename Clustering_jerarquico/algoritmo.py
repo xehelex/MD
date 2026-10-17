@@ -56,32 +56,81 @@ class ResultadoJerarquico:
 
 
 class ClusteringJerarquico:
-    """Clustering aglomerativo hecho a mano (single, complete y average linkage).
-    
-    Nota: Como montamos la matriz de distancias completa, esto chupa O(n²) 
-    de memoria. Ideal para datasets de hasta unos miles de elementos.
-    """
-    ENLACES = {"single", "complete", "average"}
-    DISTANCIAS = {"cosine", "euclidean"}
+    """Clustering aglomerativo hecho a mano (single, complete, average y ward).
 
-    def __init__(self, enlace: str = "average", distancia: str = "cosine"):
+    Nota: Como montamos la matriz de distancias completa, esto chupa O(n²)
+    de memoria. Ideal para datasets de hasta unos miles de elementos.
+
+    Las distancias de la familia Minkowski (manhattan, chebyshev y minkowski con
+    p != 2) no tienen atajo matricial, así que cuestan O(n²·d) y se notan mucho
+    en espacios de muchos atributos. Para esas conviene reducir dimensiones.
+    """
+    ENLACES = {"single", "complete", "average", "ward"}
+    DISTANCIAS = {"cosine", "euclidean", "manhattan", "chebyshev", "minkowski"}
+
+    def __init__(self, enlace: str = "average", distancia: str = "cosine", p: float = 2.0):
         if enlace not in self.ENLACES:
             raise ValueError(f"Enlace '{enlace}' no válido. Usa: {sorted(self.ENLACES)}")
         if distancia not in self.DISTANCIAS:
             raise ValueError(f"Distancia '{distancia}' no válida. Usa: {sorted(self.DISTANCIAS)}")
-            
+        if distancia == "minkowski" and not (p >= 1):
+            raise ValueError("El p de Minkowski tiene que ser >= 1 (admite np.inf).")
+
+        # Ward sale de minimizar la varianza intra-cluster y eso solo está definido
+        # sobre distancias euclídeas al cuadrado. 
+        if enlace == "ward":
+            euclidea = distancia == "euclidean" or (distancia == "minkowski" and p == 2)
+            if not euclidea:
+                raise ValueError("Ward solo tiene sentido con distancia euclídea (minkowski p=2).")
+
         self.enlace = enlace
         self.distancia = distancia
+        self.p = float(p)
         self.resultado_: ResultadoJerarquico | None = None
 
     @staticmethod
-    def _distancias(X, tipo: str) -> np.ndarray:
+    def _minkowski(A: np.ndarray, p: float) -> np.ndarray:
+        """Distancias Minkowski a fuerza bruta, recorriendo las filas por bloques.
+
+        Aquí no sirve el truco del producto escalar que usamos en euclídea y coseno:
+        hay que restar atributo a atributo, o sea O(n²·d). El bloque se ajusta solo
+        para no pedir más de ~256 MB de golpe, que si no se nos va de las manos.
+        """
+        n, d = A.shape
+        bloque = max(1, int(256e6 // max(n * d * 8, 1)))
+        D = np.zeros((n, n), dtype=float)
+
+        for ini in range(0, n, bloque):
+            fin = min(ini + bloque, n)
+            dif = np.abs(A[ini:fin, None, :] - A[None, :, :])
+            if np.isinf(p):
+                D[ini:fin] = dif.max(axis=2)
+            elif p == 1:
+                D[ini:fin] = dif.sum(axis=2)
+            else:
+                D[ini:fin] = (dif ** p).sum(axis=2) ** (1.0 / p)
+
+        return D
+
+    @staticmethod
+    def _distancias(X, tipo: str, p: float = 2.0) -> np.ndarray:
         """Calcula la matriz de distancias (soporta tanto arrays densos como sparse)."""
         if X.ndim != 2:
             raise ValueError("X tiene que ser una matriz de 2 dimensiones.")
         n = X.shape[0]
         if n < 2:
             raise ValueError("Necesitamos al menos 2 instancias para empezar.")
+
+        # Manhattan, Chebyshev y Minkowski con p != 2 van por el camino lento.
+        # La euclídea y minkowski p=2 son la misma cosa, así que las mandamos al atajo matricial de abajo.
+        exponentes = {"manhattan": 1.0, "chebyshev": np.inf, "minkowski": p}
+        if tipo in exponentes and not (tipo == "minkowski" and p == 2):
+            A = X.toarray() if sparse.issparse(X) else np.asarray(X, dtype=float)
+            if not np.all(np.isfinite(A)):
+                raise ValueError("X tiene valores NaN o infinitos.")
+            D = ClusteringJerarquico._minkowski(A, exponentes[tipo])
+            np.fill_diagonal(D, 0.0)
+            return D
 
         if sparse.issparse(X):
             X = X.astype(np.float64, copy=False)
@@ -122,14 +171,20 @@ class ClusteringJerarquico:
 
     def fit(self, X) -> ResultadoJerarquico:
         """Ejecuta el clustering y devuelve las fusiones del árbol."""
-        D0 = self._distancias(X, self.distancia)
+        D0 = self._distancias(X, self.distancia, self.p)
         n = D0.shape[0]
-        
+
+        # Ward se actualiza sobre distancias AL CUADRADO  
+        # Guardamos D0 sin tocar para las métricas y al
+        # final devolvemos las alturas en unidades de distancia.
+        es_ward = self.enlace == "ward"
+        D_trabajo = D0 ** 2 if es_ward else D0
+
         # Diccionario para llevar las distancias activas entre clusters
         dist = {}
         for i in range(n):
             for j in range(i + 1, n):
-                dist[(i, j)] = float(D0[i, j])
+                dist[(i, j)] = float(D_trabajo[i, j])
                 
         sizes = {i: 1 for i in range(n)}
         active = set(range(n))
@@ -150,7 +205,7 @@ class ClusteringJerarquico:
                     if abs(actual - d) <= 1e-12:
                         break
             else:
-                raise RuntimeError("Vaya, no se ha podido encontrar una fusión válida.")
+                raise RuntimeError("Error, no se ha podido encontrar una fusión válida.")
                 
             merges.append((i, j, d))
             nuevos = next_id
@@ -167,6 +222,10 @@ class ClusteringJerarquico:
                     dnz = min(diz, djz)
                 elif self.enlace == "complete":
                     dnz = max(diz, djz)
+                elif self.enlace == "ward":
+                    size_z = sizes[z]
+                    dnz = ((size_i + size_z) * diz + (size_j + size_z) * djz
+                           - size_z * d) / (size_i + size_j + size_z)
                 else:  # average
                     dnz = (size_i * diz + size_j * djz) / (size_i + size_j)
                     
@@ -184,8 +243,14 @@ class ClusteringJerarquico:
                 if i in key or j in key:
                     del dist[key]
 
+        merges = np.asarray(merges, dtype=float)
+        if es_ward and len(merges):
+            # Volvemos a unidades de distancia para que el dendrograma y la
+            # correlación cofenética sean comparables con el resto de enlaces.
+            merges[:, 2] = np.sqrt(np.maximum(merges[:, 2], 0.0))
+
         self.resultado_ = ResultadoJerarquico(
-            merges=np.asarray(merges, dtype=float),
+            merges=merges,
             n_instancias=n,
             enlace=self.enlace,
             distancia=self.distancia,

@@ -1,0 +1,91 @@
+{
+  "instancias_train": 480,
+  "atributos": 37246,
+  "nota": "El silhouette más alto es una buena guía numérica, pero revisa también el tamaño y sentido real de los clusters.",
+  "resultados": [
+    {
+      "enlace": "single",
+      "distancia": "cosine",
+      "tiempo_segundos": 1.4591,
+      "correlacion_cofenetica": 0.9163493642549163,
+      "silhouette_por_k": {
+        "2": 0.39836706149263557,
+        "3": 0.3987750229716461,
+        "4": 0.37456916444135707,
+        "5": 0.37430815064591283,
+        "6": 0.374496806889308,
+        "7": 0.3671871551703757,
+        "8": 0.3662625623966987,
+        "9": 0.3670229966125262,
+        "10": 0.3672171638373681
+      },
+      "k_mejor_silhouette_en_rango": 3,
+      "k_final_graficado": 4,
+      "estabilidad_ari_por_repeticion": [
+        0.49705434021340583,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "estabilidad_ari_media": 0.8994108680426812,
+      "davies_bouldin_k_final": null
+    },
+    {
+      "enlace": "complete",
+      "distancia": "cosine",
+      "tiempo_segundos": 1.4886,
+      "correlacion_cofenetica": 0.8117070117897168,
+      "silhouette_por_k": {
+        "2": 0.3741699259038189,
+        "3": 0.36789706842869446,
+        "4": 0.3543636795789166,
+        "5": 0.35331863699000865,
+        "6": 0.3549456151819943,
+        "7": 0.3666843402189496,
+        "8": 0.37072544849489925,
+        "9": 0.3672524804628815,
+        "10": 0.3683536947359628
+      },
+      "k_mejor_silhouette_en_rango": 2,
+      "k_final_graficado": 4,
+      "estabilidad_ari_por_repeticion": [
+        0.5285280959086343,
+        0.8064368131092239,
+        0.6658980827061074,
+        0.7335460284128529,
+        0.08800391539011934
+      ],
+      "estabilidad_ari_media": 0.5644825871053876,
+      "davies_bouldin_k_final": null
+    },
+    {
+      "enlace": "average",
+      "distancia": "cosine",
+      "tiempo_segundos": 1.4656,
+      "correlacion_cofenetica": 0.9576713367366341,
+      "silhouette_por_k": {
+        "2": 0.4078447869544934,
+        "3": 0.4062195832497443,
+        "4": 0.41045888185339663,
+        "5": 0.40974743236190025,
+        "6": 0.4037678796398892,
+        "7": 0.39979226979049914,
+        "8": 0.39583423827177966,
+        "9": 0.39355688494264424,
+        "10": 0.3958301825991196
+      },
+      "k_mejor_silhouette_en_rango": 4,
+      "k_final_graficado": 4,
+      "estabilidad_ari_por_repeticion": [
+        0.49705434021340583,
+        0.8551006287980841,
+        0.5666042343620522,
+        1.0,
+        0.7462123250295788
+      ],
+      "estabilidad_ari_media": 0.7329943056806242,
+      "davies_bouldin_k_final": null
+    }
+  ]
+}

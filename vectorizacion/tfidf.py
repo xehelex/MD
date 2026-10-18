@@ -1,4 +1,5 @@
 
+import pandas as pd
 from dataclasses import dataclass
 from datetime import datetime
 import html
@@ -90,6 +91,63 @@ def cargar_historiales(carpeta: str | Path) -> list[Historial]:
         if not textos:
             raise ValueError(f"Usuario sin texto útil: {usuario}")
         resultado.append(Historial(usuario, archivo.name, tuple(textos), len(publicaciones)))
+    return resultado
+
+def cargar_historiales_csv(ruta_csv: str | Path) -> list[Historial]:
+    """Carga publicaciones ya preprocesadas y las agrupa por usuario."""
+
+    ruta_csv = Path(ruta_csv)
+
+    if not ruta_csv.is_file():
+        raise FileNotFoundError(f"No se encuentra el CSV: {ruta_csv}")
+
+    df = pd.read_csv(ruta_csv, dtype={"subject_id": str})
+
+    columnas = {"subject_id", "text_Clustering"}
+    faltantes = columnas - set(df.columns)
+
+    if faltantes:
+        raise ValueError(
+            f"Faltan columnas en el CSV: {sorted(faltantes)}"
+        )
+
+    df["subject_id"] = df["subject_id"].fillna("").str.strip()
+    df["text_Clustering"] = (
+        df["text_Clustering"].fillna("").astype(str).str.strip()
+    )
+
+    df = df[
+        (df["subject_id"] != "") &
+        (df["text_Clustering"] != "")
+    ].copy()
+
+    # Conservar el orden cronológico si existe la columna date.
+    if "date" in df.columns:
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+        df = df.sort_values(
+            ["subject_id", "date"],
+            kind="stable",
+            na_position="last"
+        )
+
+    resultado = []
+
+    for usuario, grupo in df.groupby("subject_id", sort=False):
+        publicaciones = tuple(grupo["text_Clustering"].tolist())
+
+        if publicaciones:
+            resultado.append(
+                Historial(
+                    usuario=usuario,
+                    archivo=str(ruta_csv),
+                    publicaciones=publicaciones,
+                    publicaciones_totales=len(publicaciones),
+                )
+            )
+
+    if not resultado:
+        raise ValueError("El CSV no contiene usuarios con textos útiles.")
+
     return resultado
 
 

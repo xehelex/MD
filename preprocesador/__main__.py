@@ -5,23 +5,17 @@ from preprocesador import Preprocesador
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Preprocesamiento de textos para clustering")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--datos", required=True, help="Carpeta con los XML")
+    parser.add_argument("--idioma", default="auto", choices=["auto", "english", "spanish"])
+    parser.add_argument("--min_tokens", type=int, default=3)
+    parser.add_argument("--max_tokens", type=int, default=1000)
+    parser.add_argument("--guardar_csv", action="store_true")
+    args = vars(parser.parse_args())
 
-    parser.add_argument("--datos",default=Path("."),type=Path,help="Directorio que contiene los archivos XML")
-
-    parser.add_argument("--chat-words",default="./config/chat_words.json",type=Path,help="Ruta del diccionario de jerga")
-
-    args = parser.parse_args()
-
-    argus = {
-        "datos": args.datos
-    }
-
-    preprocesador = Preprocesador(argus,chat_words_path=args.chat_words)
-
-    df = preprocesador.preprocesar_datos_clustering()
-
-    df.to_csv("output/data_prepro.csv",index=False)
+    prep = Preprocesador(args)
+    df = prep.preprocesar_datos_clustering()
+    print(f"Publicaciones preprocesadas: {len(df)}")
 
 if __name__ == "__main__":
     main()

@@ -10,7 +10,7 @@ import joblib
 from scipy.sparse import save_npz
 import sklearn
 
-from .tfidf import cargar_historiales, crear_vectorizador
+from .tfidf import cargar_historiales, crear_vectorizador, cargar_historiales_csv
 
 
 def main():
@@ -20,7 +20,7 @@ def main():
     y solo entrenamiento participa en el aprendizaje del vocabulario y del IDF.
     """
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--datos", type=Path, default=Path("."))
+    parser.add_argument("--datos", type=Path, default=Path("output/data_preprocesado.csv"))
     parser.add_argument("--salida", type=Path, default=Path("resultados_tfidf"))
     parser.add_argument("--test-size", type=float, default=0.2)
     parser.add_argument("--seed", type=int, default=42)
@@ -42,7 +42,8 @@ def main():
     if args.salida.exists() and (not args.salida.is_dir() or any(args.salida.iterdir())):
         parser.error("La salida debe ser una carpeta nueva o vacía.")
 
-    usuarios = cargar_historiales(args.datos)
+    #usuarios = cargar_historiales(args.datos)
+    usuarios = cargar_historiales_csv(args.datos)
     indices = list(range(len(usuarios)))
     random.Random(args.seed).shuffle(indices)
     n_test = math.ceil(len(indices) * args.test_size)

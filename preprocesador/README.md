@@ -105,7 +105,7 @@ El entorno `.venv` se crea en cada equipo; no hace falta enviarlo.
 
 - Se extraen las publicaciones de los XML, junto con el identificador del usuario, título, fecha, texto e información adicional.
 - Se eliminan las URLs y las etiquetas HTML.
-- Se convierte la jerga utilizando `config/chat_words.json`.
+- Se convierte la jerga utilizando `chat_words.json`.
 - Se detecta el idioma de cada texto. Si se detecta español, se utilizan stopwords españolas. El resto de idiomas se procesa como inglés.
 - Se normaliza el texto a minúsculas y se eliminan los signos de puntuación, excepto los apóstrofes y los guiones.
 - Se tokeniza el texto y se eliminan las stopwords.

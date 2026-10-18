@@ -1,13 +1,8 @@
 """Corte del dendrograma por tamaño mínimo de grupo.
 
-El corte clásico pide k grupos y acepta lo que salga. Sobre estos datos eso
-devuelve 477/1/1/1: formalmente cuatro grupos, en la práctica uno y tres
-personas sueltas, porque los enlaces por encadenamiento gastan el presupuesto
-de k despegando instancias de una en una.
-
-Aquí se le pide otra cosa: grupos de al menos `minimo` miembros. Cuando una
-división deja un trozo por debajo de ese umbral, ese trozo se aparta como
-atípico y el descenso continúa por la rama que sí tiene masa.
+Pedir k grupos sobre estos datos devuelve 477/1/1/1, porque el encadenamiento
+se gasta el presupuesto despegando gente de una en una. Aquí se piden grupos
+de al menos `minimo` miembros y lo que no llega se aparta como atípico.
 """
 from __future__ import annotations
 
@@ -35,11 +30,11 @@ def _arbol(resultado):
 def cortar_por_tamano(resultado, minimo: int = 10, max_grupos: int | None = None):
     """Devuelve (etiquetas, informe) exigiendo grupos de al menos `minimo`.
 
-    Las instancias apartadas por no alcanzar el umbral se etiquetan con -1. Se
-    desciende por las fusiones más altas primero, que son las divisiones con más
-    significado, y se para al llegar a `max_grupos` si se indica.
+    Los apartados van con etiqueta -1. Se baja por las fusiones más altas
+    primero. `minimo=1` reproduce el corte clásico.
 
-    Un `minimo` de 1 reproduce el comportamiento del corte clásico.
+    Ojo con el umbral: ponerlo alto borra los grupos pequeños, y aquí los
+    pequeños son los interesantes. Con 15 se perdía el de ludopatía.
     """
     if minimo < 1:
         raise ValueError("El tamaño mínimo tiene que ser al menos 1.")
@@ -55,8 +50,7 @@ def cortar_por_tamano(resultado, minimo: int = 10, max_grupos: int | None = None
     definitivos, apartadas, descartes = [], [], 0
 
     while pendientes:
-        # Los nodos que esperan ya cuentan como grupos: si partirlos nos pasaria
-        # del maximo, los dejamos tal cual.
+        # Los que esperan ya cuentan como grupos.
         if max_grupos is not None and len(definitivos) + len(pendientes) >= max_grupos:
             break
 
@@ -105,8 +99,6 @@ def cortar_por_tamano(resultado, minimo: int = 10, max_grupos: int | None = None
 def k_equivalente(resultado, etiquetas: np.ndarray) -> int:
     """Cuántos grupos pediría un corte clásico para aislar los mismos atípicos.
 
-    Sirve para enseñar el ahorro: si el corte por tamaño saca 9 grupos y aquí
-    salen 46, es que el corte clásico habría gastado 37 grupos en instancias
-    sueltas antes de encontrar la misma estructura.
+    Si salen 9 grupos y aquí 46, el clásico habría gastado 37 en gente suelta.
     """
     return int(len(np.unique(etiquetas[etiquetas >= 0])) + (etiquetas == -1).sum())

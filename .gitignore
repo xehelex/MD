@@ -23,10 +23,15 @@ output/
 # Informe de validacion: lo rehace python -m Clustering_jerarquico.validacion
 resultados_clustering/validacion.html
 
-# Matrices regeneradas en local para probar la limpieza del texto.
-# Se rehacen con: python -m vectorizacion --datos <ruta-xml> --salida <carpeta> [--quitar-vacias]
+# Matrices regeneradas en local para probar la limpieza del texto y las
+# variantes de representacion. Se rehacen con:
+#   python -m vectorizacion --datos <ruta-xml> --salida <carpeta> [--quitar-vacias] [--sublinear-tf]
 resultados_tfidf_limpio/
 resultados_tfidf_limpio_sinvacias/
+resultados_var_*/
+
+# Salidas del banco de pruebas: python -m experimentos --entrada <carpeta>
+resultados_experimentos*/
 
 # Los XML de CLEF NO van al repo. Se descargan aparte y se dejan en local.
 data_*/

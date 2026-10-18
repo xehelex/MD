@@ -27,13 +27,10 @@ def _coinciden(etiquetas_a, etiquetas_b) -> bool:
 
 
 def etiquetas_desde_scipy(Z: np.ndarray, n: int, k: int) -> np.ndarray:
-    """Corta el árbol de scipy contando fusiones, igual que hace nuestro etiquetas().
+    """Corta el árbol de scipy contando fusiones, como nuestro etiquetas().
 
-    No usamos fcluster con 'maxclust' porque corta por umbral de altura: cuando
-    varias fusiones empatan a la misma distancia -- algo habitual en texto, donde
-    dos grupos sin vocabulario común quedan siempre a distancia 1 -- no es capaz
-    de devolver exactamente k grupos y se queda corto. Z trae las fusiones en el
-    mismo formato que las nuestras, así que basta con aplicar el mismo recorte.
+    fcluster con 'maxclust' no sirve aquí: corta por umbral y con fusiones
+    empatadas no devuelve exactamente k grupos.
     """
     grupos = {i: {i} for i in range(n)}
     siguiente = n
@@ -49,25 +46,24 @@ def etiquetas_desde_scipy(Z: np.ndarray, n: int, k: int) -> np.ndarray:
 
 
 def contrastar_enlace(X, A, enlace: str, metodo_scipy: str, distancia: str) -> dict:
-    """Compara un enlace propio con el de scipy en TODOS los cortes del árbol.
+    """Compara un enlace propio con el de scipy en TODOS los cortes.
 
-    Recorre k = 2 .. n-1 en lugar de unos pocos valores sueltos, que es la única
-    forma de afirmar que los dos árboles son el mismo y no que coinciden por azar
-    en los cortes que hemos mirado.
+    Recorre k = 2 .. n-1 y no unos pocos valores: con cinco sueltos parecía
+    que todo cuadraba y se nos escapaban diferencias.
     """
     inicio = time.perf_counter()
     resultado = ClusteringJerarquico(enlace=enlace, distancia=distancia).fit(X)
     segundos = time.perf_counter() - inicio
 
-    # Ward solo admite la matriz de observaciones; el resto hay que decirles
-    # explícitamente la métrica o scipy asume euclídea y la comparación no vale.
+    # A los demás hay que decirles la métrica: scipy asume euclídea por
+    # defecto y entonces comparas peras con manzanas.
     Z = (linkage(A, method=metodo_scipy) if metodo_scipy == "ward"
          else linkage(A, method=metodo_scipy, metric=distancia))
     n = resultado.n_instancias
     alturas = resultado.merges[:, 2]
 
-    # Un corte en k separa la fusión n-k-1 de la n-k. Si las dos están a la misma
-    # altura, el árbol no decide cuál va antes y las dos particiones son igual de válidas. No se cuentan como discrepancia.
+    # Si las dos fusiones del corte empatan en altura, el árbol no decide el
+    # orden y las dos particiones valen. No cuentan como discrepancia.
     ambiguos = {k for k in range(2, n)
                 if np.isclose(alturas[n - k - 1], alturas[n - k], rtol=0, atol=1e-12)}
 

@@ -9,28 +9,27 @@ from scipy import sparse
 
 @dataclass
 class ResultadoJerarquico:
-    """Estructura para guardar el árbol de fusiones y manejar los cortes."""
-    merges: np.ndarray          # (n-1, 3): id_izq, id_der, altura
+    """Árbol de fusiones (id_izq, id_der, altura) y matriz de distancias original."""
+    merges: np.ndarray
     n_instancias: int
     enlace: str
     distancia: str
     distancias_originales: np.ndarray
 
     def etiquetas(self, k: int) -> np.ndarray:
-        """Corta el árbol para sacar exactamente k clusters."""
+        """Corta el árbol en exactamente k clusters."""
         n = self.n_instancias
         if not 1 <= k <= n:
             raise ValueError(f"k tiene que estar entre 1 y {n}.")
-        
+
         grupos = {i: {i} for i in range(n)}
         siguiente_id = n
-        
-        for izquierda, derecha, _altura in self.merges[:n-k]:
+
+        for izquierda, derecha, _altura in self.merges[:n - k]:
             izquierda, derecha = int(izquierda), int(derecha)
-            nuevos = grupos.pop(izquierda) | grupos.pop(derecha)
-            grupos[siguiente_id] = nuevos
+            grupos[siguiente_id] = grupos.pop(izquierda) | grupos.pop(derecha)
             siguiente_id += 1
-            
+
         etiquetas = np.empty(n, dtype=int)
         for etiqueta, miembros in enumerate(grupos.values()):
             for miembro in miembros:
@@ -38,17 +37,16 @@ class ResultadoJerarquico:
         return etiquetas
 
     def asignar_nuevo(self, distancia_nuevo: np.ndarray, k: int) -> int:
-        """Asigna un nuevo elemento al cluster con el que tenga menor distancia media.
-        
-        Ojo: esto es una aproximación práctica para inferencia rápida, 
-        no una predicción nativa del árbol.
+        """Asigna un elemento nuevo al cluster con menor distancia media.
+
+        Es una aproximación, no una predicción nativa del árbol.
         """
         d = np.asarray(distancia_nuevo, dtype=float)
         if d.shape != (self.n_instancias,):
             raise ValueError("distancia_nuevo debe tener una distancia por cada instancia.")
         if not np.all(np.isfinite(d)):
             raise ValueError("Las distancias tienen que ser valores finitos.")
-            
+
         labels = self.etiquetas(k)
         candidatos = np.unique(labels)
         medias = [float(d[labels == c].mean()) for c in candidatos]
@@ -56,14 +54,10 @@ class ResultadoJerarquico:
 
 
 class ClusteringJerarquico:
-    """Clustering aglomerativo hecho a mano (single, complete, average y ward).
+    """Clustering aglomerativo (single, complete, average, ward).
 
-    Nota: Como montamos la matriz de distancias completa, esto chupa O(n²)
-    de memoria. Ideal para datasets de hasta unos miles de elementos.
-
-    Las distancias de la familia Minkowski (manhattan, chebyshev y minkowski con
-    p != 2) no tienen atajo matricial, así que cuestan O(n²·d) y se notan mucho
-    en espacios de muchos atributos. Para esas conviene reducir dimensiones.
+    Construye la matriz de distancias completa, con coste O(n²) en memoria.
+    Manhattan, Chebyshev y Minkowski con p != 2 cuestan O(n²·d).
     """
     ENLACES = {"single", "complete", "average", "ward"}
     DISTANCIAS = {"cosine", "euclidean", "manhattan", "chebyshev", "minkowski"}
@@ -76,8 +70,6 @@ class ClusteringJerarquico:
         if distancia == "minkowski" and not (p >= 1):
             raise ValueError("El p de Minkowski tiene que ser >= 1 (admite np.inf).")
 
-        # Ward sale de minimizar la varianza intra-cluster y eso solo está definido
-        # sobre distancias euclídeas al cuadrado. 
         if enlace == "ward":
             euclidea = distancia == "euclidean" or (distancia == "minkowski" and p == 2)
             if not euclidea:
@@ -90,12 +82,7 @@ class ClusteringJerarquico:
 
     @staticmethod
     def _minkowski(A: np.ndarray, p: float) -> np.ndarray:
-        """Distancias Minkowski a fuerza bruta, recorriendo las filas por bloques.
-
-        Aquí no sirve el truco del producto escalar que usamos en euclídea y coseno:
-        hay que restar atributo a atributo, o sea O(n²·d). El bloque se ajusta solo
-        para no pedir más de ~256 MB de golpe, que si no se nos va de las manos.
-        """
+        """Distancias de Minkowski por bloques de filas (~256 MB por bloque)."""
         n, d = A.shape
         bloque = max(1, int(256e6 // max(n * d * 8, 1)))
         D = np.zeros((n, n), dtype=float)
@@ -114,15 +101,13 @@ class ClusteringJerarquico:
 
     @staticmethod
     def _distancias(X, tipo: str, p: float = 2.0) -> np.ndarray:
-        """Calcula la matriz de distancias (soporta tanto arrays densos como sparse)."""
+        """Matriz de distancias para entrada densa o dispersa."""
         if X.ndim != 2:
             raise ValueError("X tiene que ser una matriz de 2 dimensiones.")
         n = X.shape[0]
         if n < 2:
             raise ValueError("Necesitamos al menos 2 instancias para empezar.")
 
-        # Manhattan, Chebyshev y Minkowski con p != 2 van por el camino lento.
-        # La euclídea y minkowski p=2 son la misma cosa, así que las mandamos al atajo matricial de abajo.
         exponentes = {"manhattan": 1.0, "chebyshev": np.inf, "minkowski": p}
         if tipo in exponentes and not (tipo == "minkowski" and p == 2):
             A = X.toarray() if sparse.issparse(X) else np.asarray(X, dtype=float)
@@ -135,20 +120,16 @@ class ClusteringJerarquico:
         if sparse.issparse(X):
             X = X.astype(np.float64, copy=False)
             normas = np.sqrt(np.asarray(X.multiply(X).sum(axis=1)).ravel())
+            producto = (X @ X.T).toarray()
             if tipo == "cosine":
-                producto = (X @ X.T).toarray()
                 denom = np.outer(normas, normas)
                 similitud = np.divide(producto, denom, out=np.zeros_like(producto), where=denom > 0)
                 D = np.clip(1.0 - similitud, 0.0, 2.0)
-                
-                # Vectores a cero: si ambos son cero, distancia 0; si uno lo es, distancia 1.
                 ceros = normas == 0
                 D[np.ix_(ceros, ceros)] = 0.0
             else:
-                producto = (X @ X.T).toarray()
                 norma2 = normas ** 2
-                d2 = np.maximum(norma2[:, None] + norma2[None, :] - 2 * producto, 0.0)
-                D = np.sqrt(d2)
+                D = np.sqrt(np.maximum(norma2[:, None] + norma2[None, :] - 2 * producto, 0.0))
         else:
             A = np.asarray(X, dtype=float)
             if not np.all(np.isfinite(A)):
@@ -159,41 +140,37 @@ class ClusteringJerarquico:
                 denom = np.outer(normas, normas)
                 similitud = np.divide(producto, denom, out=np.zeros_like(producto), where=denom > 0)
                 D = np.clip(1.0 - similitud, 0.0, 2.0)
-                
                 ceros = normas == 0
                 D[np.ix_(ceros, ceros)] = 0.0
             else:
                 norma2 = np.sum(A * A, axis=1)
                 D = np.sqrt(np.maximum(norma2[:, None] + norma2[None, :] - 2 * (A @ A.T), 0.0))
-                
+
         np.fill_diagonal(D, 0.0)
         return D
 
     def fit(self, X) -> ResultadoJerarquico:
-        """Ejecuta el clustering y devuelve las fusiones del árbol."""
+        """Ejecuta el clustering y devuelve el árbol de fusiones."""
         D0 = self._distancias(X, self.distancia, self.p)
         n = D0.shape[0]
 
-        # Ward se actualiza sobre distancias AL CUADRADO  
-        # Guardamos D0 sin tocar para las métricas y al
-        # final devolvemos las alturas en unidades de distancia.
+        # Ward se actualiza sobre distancias al cuadrado; D0 se conserva para las métricas.
         es_ward = self.enlace == "ward"
         D_trabajo = D0 ** 2 if es_ward else D0
 
-        # Diccionario para llevar las distancias activas entre clusters
         dist = {}
         for i in range(n):
             for j in range(i + 1, n):
                 dist[(i, j)] = float(D_trabajo[i, j])
-                
+
         sizes = {i: 1 for i in range(n)}
         active = set(range(n))
         heap = []
         counter = itertools.count()
-        
+
         for (i, j), d in dist.items():
             heapq.heappush(heap, (d, next(counter), i, j))
-            
+
         merges = []
         next_id = n
 
@@ -205,19 +182,18 @@ class ClusteringJerarquico:
                     if abs(actual - d) <= 1e-12:
                         break
             else:
-                raise RuntimeError("Error, no se ha podido encontrar una fusión válida.")
-                
+                raise RuntimeError("No se ha podido encontrar una fusión válida.")
+
             merges.append((i, j, d))
             nuevos = next_id
             next_id += 1
             otros = list(active - {i, j})
             size_i, size_j = sizes[i], sizes[j]
 
-            # Actualizamos distancias según el criterio de enlace elegido
             for z in otros:
-                diz = dist[(min(i, z), max(i, z))]
-                djz = dist[(min(j, z), max(j, z))]
-                
+                diz = dist.pop((min(i, z), max(i, z)))
+                djz = dist.pop((min(j, z), max(j, z)))
+
                 if self.enlace == "single":
                     dnz = min(diz, djz)
                 elif self.enlace == "complete":
@@ -226,27 +202,22 @@ class ClusteringJerarquico:
                     size_z = sizes[z]
                     dnz = ((size_i + size_z) * diz + (size_j + size_z) * djz
                            - size_z * d) / (size_i + size_j + size_z)
-                else:  # average
+                else:
                     dnz = (size_i * diz + size_j * djz) / (size_i + size_j)
-                    
+
                 key = (min(nuevos, z), max(nuevos, z))
                 dist[key] = float(dnz)
                 heapq.heappush(heap, (float(dnz), next(counter), key[0], key[1]))
 
+            dist.pop((min(i, j), max(i, j)))
             active.remove(i)
             active.remove(j)
             active.add(nuevos)
             sizes[nuevos] = size_i + size_j
-            
-            # Limpiamos las distancias viejas de los nodos que acabamos de fusionar
-            for key in list(dist):
-                if i in key or j in key:
-                    del dist[key]
 
         merges = np.asarray(merges, dtype=float)
         if es_ward and len(merges):
-            # Volvemos a unidades de distancia para que el dendrograma y la
-            # correlación cofenética sean comparables con el resto de enlaces.
+            # Las alturas de Ward vuelven a unidades de distancia (raíz de la altura cuadrática).
             merges[:, 2] = np.sqrt(np.maximum(merges[:, 2], 0.0))
 
         self.resultado_ = ResultadoJerarquico(
@@ -259,5 +230,5 @@ class ClusteringJerarquico:
         return self.resultado_
 
     def fit_predict(self, X, k: int) -> np.ndarray:
-        """Ajusta el modelo y devuelve directamente las etiquetas para un corte de k clusters."""
+        """Ajusta el modelo y devuelve las etiquetas para un corte de k clusters."""
         return self.fit(X).etiquetas(k)

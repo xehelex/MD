@@ -1,4 +1,3 @@
-
 {
   "entrada": "resultados_tfidf",
   "salida": "resultados_clustering",
@@ -9,10 +8,10 @@
     "average"
   ],
   "k_min": 2,
-  "k_max": 10,
-  "k_final": 4,
+  "k_max": 20,
   "calcular_estabilidad": false,
   "repeticiones_estabilidad": 5,
   "semilla": 42,
-  "generar_graficas": true
+  "generar_graficas": true,
+  "incluir_db": true
 }

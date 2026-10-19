@@ -1,10 +1,10 @@
-"""Implementación propia de clustering jerárquico aglomerativo."""
-from .algoritmo import ClusteringJerarquico, ResultadoJerarquico
+"""Clustering jerárquico aglomerativo con implementación propia."""
+from .algoritmo import ClusteringJerarquico, ResultadoJerarquico, ModeloEntrenado, entrenar_modelo
 from .metricas import (silhouette_medio, correlacion_cofenetica, davies_bouldin,
                        calinski_harabasz, adjusted_rand_index)
 
 __all__ = [
-    "ClusteringJerarquico", "ResultadoJerarquico",
+    "ClusteringJerarquico", "ResultadoJerarquico", "ModeloEntrenado", "entrenar_modelo",
     "silhouette_medio", "correlacion_cofenetica", "davies_bouldin",
     "calinski_harabasz", "adjusted_rand_index",
 ]

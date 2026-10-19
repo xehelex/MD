@@ -1,13 +1,15 @@
-"""Métricas internas y específicas para evaluar clustering jerárquico."""
+"""Métricas para evaluar una partición: silhouette, cofenética, Davies-Bouldin, Calinski-Harabasz y ARI."""
 from __future__ import annotations
 import numpy as np
+from scipy import sparse
 
 
 def silhouette_medio(D: np.ndarray, etiquetas: np.ndarray) -> float:
-    """Calcula el silhouette medio pasándole una matriz de distancias ya calculada.
+    """Silhouette medio de una partición a partir de su matriz de distancias.
 
-    Devuelve NaN si hay menos de dos clusters o si cada instancia está en su
-    propio cluster. Si un punto está solito en un cluster, le ponemos 0.
+    Pre:  D es cuadrada (n, n) y etiquetas tiene n elementos.
+    Post: devuelve un valor en [-1, 1], o NaN si hay menos de dos clusters o uno por instancia.
+          Una instancia sola en su cluster puntúa 0.
     """
     D = np.asarray(D, dtype=float)
     labels = np.asarray(etiquetas)
@@ -25,7 +27,6 @@ def silhouette_medio(D: np.ndarray, etiquetas: np.ndarray) -> float:
         mismo = labels == labels[i]
         mismo[i] = False
         if not np.any(mismo):
-            valores[i] = 0.0
             continue
 
         a = float(D[i, mismo].mean())
@@ -37,22 +38,25 @@ def silhouette_medio(D: np.ndarray, etiquetas: np.ndarray) -> float:
 
 
 def correlacion_cofenetica(resultado) -> float:
-    """Mide la correlación de Pearson entre las distancias originales y las alturas del árbol."""
+    """Correlación de Pearson entre las distancias originales y las alturas a las que el árbol une cada par.
+
+    Pre:  resultado es un ResultadoJerarquico ya ajustado.
+    Post: devuelve un valor en [-1, 1], o NaN si alguna de las dos series es constante.
+    """
     D = resultado.distancias_originales
     n = resultado.n_instancias
-    cophenetica = np.zeros((n, n), dtype=float)
+    cofenetica = np.zeros((n, n), dtype=float)
 
     miembros = {i: [i] for i in range(n)}
     for idx, (izquierda, derecha, altura) in enumerate(resultado.merges):
-        i, j = int(izquierda), int(derecha)
-        mi, mj = miembros.pop(i), miembros.pop(j)
+        mi, mj = miembros.pop(int(izquierda)), miembros.pop(int(derecha))
         for a in mi:
             for b in mj:
-                cophenetica[a, b] = cophenetica[b, a] = altura
+                cofenetica[a, b] = cofenetica[b, a] = altura
         miembros[n + idx] = mi + mj
 
     tri = np.triu_indices(n, 1)
-    x, y = D[tri], cophenetica[tri]
+    x, y = D[tri], cofenetica[tri]
 
     if np.std(x) == 0 or np.std(y) == 0:
         return float("nan")
@@ -61,12 +65,12 @@ def correlacion_cofenetica(resultado) -> float:
 
 
 def davies_bouldin(X, etiquetas: np.ndarray) -> float:
-    """Calcula el índice Davies-Bouldin en su versión euclídea (cuanto menor, mejor).
+    """Índice de Davies-Bouldin con distancia euclídea entre centroides (menor es mejor).
 
-    Va bien tenerlo como métrica extra, aunque ojo: para matrices dispersas
-    toca densificar los datos, así que úsalo solo con datasets pequeños o medianos.
+    Pre:  X tiene n filas (densa o dispersa) y etiquetas tiene n elementos.
+    Post: devuelve un valor >= 0, o NaN si hay menos de dos clusters o uno por instancia.
+    Una matriz dispersa se pasa a densa, así que conviene usarlo con conjuntos pequeños o medianos.
     """
-    from scipy import sparse
     A = X.toarray() if sparse.issparse(X) else np.asarray(X, dtype=float)
     labels = np.asarray(etiquetas)
     grupos = np.unique(labels)
@@ -91,12 +95,10 @@ def davies_bouldin(X, etiquetas: np.ndarray) -> float:
 
 
 def adjusted_rand_index(etiquetas_a: np.ndarray, etiquetas_b: np.ndarray) -> float:
-    """Calcula el Índice Rand Ajustado (ARI) entre dos particiones sin depender de sklearn.
+    """Índice de Rand ajustado (ARI) entre dos particiones de las mismas instancias.
 
-    Ideal para comparar contra una referencia real o para ver qué tan estables
-    son dos ejecuciones distintas sobre las mismas filas.
-    - Cerca de 1: son prácticamente iguales.
-    - Alrededor de 0: coinciden lo esperable por pura chiripa (azar).
+    Pre:  las dos etiquetas son vectores de la misma longitud.
+    Post: devuelve 1 si las particiones son iguales y un valor cercano a 0 si solo coinciden por azar.
     """
     a, b = np.asarray(etiquetas_a), np.asarray(etiquetas_b)
     if a.ndim != 1 or b.ndim != 1 or len(a) != len(b):
@@ -110,11 +112,13 @@ def adjusted_rand_index(etiquetas_a: np.ndarray, etiquetas_b: np.ndarray) -> flo
     tabla = np.zeros((ai.max() + 1, bi.max() + 1), dtype=np.int64)
     np.add.at(tabla, (ai, bi), 1)
 
-    comb2 = lambda x: x * (x - 1) / 2.0
-    suma_celdas = float(comb2(tabla).sum())
-    suma_filas = float(comb2(tabla.sum(axis=1)).sum())
-    suma_columnas = float(comb2(tabla.sum(axis=0)).sum())
-    total = float(comb2(len(a)))
+    def pares(x):
+        return x * (x - 1) / 2.0
+
+    suma_celdas = float(pares(tabla).sum())
+    suma_filas = float(pares(tabla.sum(axis=1)).sum())
+    suma_columnas = float(pares(tabla.sum(axis=0)).sum())
+    total = float(pares(len(a)))
 
     esperado = suma_filas * suma_columnas / total
     maximo = 0.5 * (suma_filas + suma_columnas)
@@ -125,10 +129,13 @@ def adjusted_rand_index(etiquetas_a: np.ndarray, etiquetas_b: np.ndarray) -> flo
 
     return float((suma_celdas - esperado) / denominador)
 
-def normalizar_filas(X):
-    """Normaliza cada fila a norma L2 igual a 1, sin usar sklearn."""
-    from scipy import sparse
 
+def normalizar_filas(X):
+    """Escala cada fila a norma L2 igual a 1.
+
+    Pre:  X es una matriz (n, d) densa o dispersa.
+    Post: devuelve una matriz del mismo tipo y forma; las filas nulas se quedan en cero.
+    """
     if sparse.issparse(X):
         normas = np.sqrt(np.asarray(X.multiply(X).sum(axis=1)).ravel())
         inversas = np.zeros_like(normas, dtype=float)
@@ -141,15 +148,12 @@ def normalizar_filas(X):
 
 
 def calinski_harabasz(X, etiquetas: np.ndarray) -> float:
-    """Calcula el índice de Calinski-Harabasz (cuanto mayor, mejor).
+    """Índice de Calinski-Harabasz: (B / (k - 1)) / (W / (n - k)), con B y W las dispersiones entre y dentro de clusters.
 
-    Cociente entre la dispersión entre clusters (B) y la dispersión interna (W),
-    ponderadas por sus grados de libertad: (B / (k - 1)) / (W / (n - k)).
-    No densifica X: con matrices dispersas solo se materializan los k centroides.
-    Devuelve NaN si hay menos de dos clusters, si cada instancia está sola o si W = 0.
+    Pre:  X tiene n filas (densa o dispersa) y etiquetas tiene n elementos.
+    Post: devuelve un valor >= 0 (mayor es mejor), o NaN si hay menos de dos clusters, uno por instancia o W = 0.
+    No densifica X: con matrices dispersas solo se construyen los k centroides.
     """
-    from scipy import sparse
-
     labels = np.asarray(etiquetas)
     n = len(labels)
     grupos, inv = np.unique(labels, return_inverse=True)

@@ -15,7 +15,6 @@
   "semilla": 42,
   "generar_graficas": true,
   "incluir_db": true,
-  "ejecutar_experimentos": true,
   "experimentos": {
     "busqueda": "mallado",
     "puntos_malla": 12,
@@ -25,5 +24,11 @@
       "davies_bouldin",
       "calinski_harabasz"
     ]
+  },
+  "mejor_modelo": {
+    "enlace": "ward",
+    "distancia": "cosine",
+    "k": 2,
+    "archivo": "modelo.pkl"
   }
 }

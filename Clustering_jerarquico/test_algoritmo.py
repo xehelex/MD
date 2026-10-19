@@ -9,7 +9,8 @@ import unittest
 import numpy as np
 
 from .algoritmo import ClusteringJerarquico
-from .metricas import adjusted_rand_index
+from .cli import preparar_modelo
+from .metricas import adjusted_rand_index, calinski_harabasz
 
 # Cuatro puntos sobre una recta. Las alturas de fusión salen a mano sin esfuerzo
 # y cada enlace da una secuencia distinta, que es justo lo que queremos vigilar.
@@ -145,6 +146,40 @@ class TestUso(unittest.TestCase):
             with self.subTest(**kwargs):
                 with self.assertRaises(ValueError):
                     ClusteringJerarquico(**kwargs)
+
+
+class TestCalinskiHarabasz(unittest.TestCase):
+    def test_valor_hecho_a_mano(self):
+        # Centroides 0.5 y 10.5, media global 5.5: B = 100, W = 1, n = 4, k = 2.
+        X = np.array([[0.0], [1.0], [10.0], [11.0]])
+        self.assertAlmostEqual(calinski_harabasz(X, np.array([0, 0, 1, 1])), 200.0, places=9)
+
+    def test_sparse_y_denso_coinciden(self):
+        from scipy import sparse
+        X = np.random.default_rng(5).random((20, 4))
+        etiquetas = np.arange(20) % 3
+        self.assertAlmostEqual(calinski_harabasz(X, etiquetas),
+                               calinski_harabasz(sparse.csr_matrix(X), etiquetas), places=9)
+
+    def test_casos_degenerados(self):
+        X = np.random.default_rng(6).random((5, 2))
+        self.assertTrue(np.isnan(calinski_harabasz(X, np.zeros(5, dtype=int))))
+        self.assertTrue(np.isnan(calinski_harabasz(X, np.arange(5))))
+
+
+class TestWardConCoseno(unittest.TestCase):
+    def test_ward_con_coseno_pasa_a_euclidea_normalizada(self):
+        X = np.random.default_rng(7).random((10, 3)) * 5
+        modelo, X_modelo = preparar_modelo("ward", "cosine", X)
+        self.assertEqual(modelo.distancia, "euclidean")
+        np.testing.assert_allclose(np.linalg.norm(np.asarray(X_modelo), axis=1), 1.0, atol=1e-12)
+        modelo.fit(X_modelo)  # no debe lanzar
+
+    def test_otros_enlaces_no_se_tocan(self):
+        X = np.random.default_rng(8).random((6, 2))
+        modelo, X_modelo = preparar_modelo("average", "cosine", X)
+        self.assertEqual(modelo.distancia, "cosine")
+        self.assertIs(X_modelo, X)
 
 
 if __name__ == "__main__":

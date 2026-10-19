@@ -121,18 +121,19 @@ def guardar_silhouette(ks, valores, salida: Path):
 
 
 def guardar_busqueda_k(filas, mejores: dict, titulo: str, ruta: Path):
-    """Silhouette y Davies-Bouldin frente a k, marcando los k visitados y el óptimo hallado.
+    """Silhouette, Davies-Bouldin y Calinski-Harabasz frente a k, marcando los k visitados y el óptimo hallado.
 
-    `filas`: diccionarios con k, silhouette, davies_bouldin y visitado_<métrica>.
+    `filas`: diccionarios con k, silhouette, davies_bouldin, calinski_harabasz y visitado_<métrica>.
     `mejores`: {métrica: k óptimo} para las métricas sobre las que se buscó.
     """
     filas = sorted(filas, key=lambda f: f["k"])
     paneles = [
         ("silhouette", "Silhouette medio (maximizar)"),
         ("davies_bouldin", "Davies-Bouldin (minimizar)"),
+        ("calinski_harabasz", "Calinski-Harabasz (maximizar)"),
     ]
 
-    fig, ejes = plt.subplots(1, 2, figsize=(13, 4.8))
+    fig, ejes = plt.subplots(1, len(paneles), figsize=(19, 4.8))
     for ax, (clave, etiqueta) in zip(ejes, paneles):
         visitadas = [f for f in filas if f[f"visitado_{clave}"]]
 

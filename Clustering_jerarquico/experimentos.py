@@ -1,4 +1,7 @@
-"""Banco de pruebas: busca el mejor k sin recorrer todo el rango y guarda silhouette y Davies-Bouldin.
+"""Banco de pruebas: busca el mejor k sin recorrer todo el rango y guarda silhouette, Davies-Bouldin y Calinski-Harabasz.
+
+Se puede lanzar solo (python -m <paquete>.experimentos) o a continuación del CLI principal
+(clave "ejecutar_experimentos": true en config.json).
 
 Métodos de búsqueda (--busqueda):
     mallado  malla geométrica gruesa para localizar la zona buena y bisección dentro de ella (por defecto).
@@ -21,20 +24,22 @@ from pathlib import Path
 import numpy as np
 from scipy.sparse import load_npz
 from .algoritmo import ClusteringJerarquico
-from .cli import cargar_configuracion
-from .metricas import silhouette_medio, davies_bouldin, correlacion_cofenetica, normalizar_filas
+from .cli import cargar_configuracion, preparar_modelo
+from .metricas import (silhouette_medio, davies_bouldin, calinski_harabasz,
+                       correlacion_cofenetica, normalizar_filas)
 from .plots import guardar_busqueda_k
 
 # Signo con el que cada métrica se convierte en una puntuación a maximizar.
-CRITERIOS = {"silhouette": 1.0, "davies_bouldin": -1.0}
+CRITERIOS = {"silhouette": 1.0, "davies_bouldin": -1.0, "calinski_harabasz": 1.0}
 
 COLUMNAS_EVALUACIONES = [
-    "distancia", "enlace", "k", "silhouette", "davies_bouldin", "tam_min", "tam_max",
-    "visitado_silhouette", "visitado_davies_bouldin",
+    "distancia", "distancia_efectiva", "enlace", "k", "silhouette", "davies_bouldin",
+    "calinski_harabasz", "tam_min", "tam_max",
+    "visitado_silhouette", "visitado_davies_bouldin", "visitado_calinski_harabasz",
 ]
 COLUMNAS_RESUMEN = [
-    "distancia", "enlace", "busqueda", "criterio", "k_mejor", "silhouette", "davies_bouldin",
-    "tam_min", "tam_max", "evaluaciones_busqueda", "evaluaciones_barrido",
+    "distancia", "distancia_efectiva", "enlace", "busqueda", "criterio", "k_mejor",
+    "silhouette", "davies_bouldin", "calinski_harabasz", "tam_min", "tam_max", "evaluaciones_busqueda", "evaluaciones_barrido",
     "tiempo_fit_s", "tiempo_busqueda_s", "correlacion_cofenetica",
     "k_exhaustivo", "valor_exhaustivo", "busqueda_acierta", "k_visitados",
 ]
@@ -98,19 +103,21 @@ def _puntuacion(evaluar, criterio: str):
 
 
 def probar_combinacion(modelo, X, k_min: int, k_max: int, criterios: list[str],
-                       comprobar: bool, metodo: str, puntos: int):
+                       comprobar: bool, metodo: str, puntos: int, distancia_solicitada: str | None = None):
     """Ajusta el modelo una vez y busca el mejor k para cada criterio.
 
     Las evaluaciones se comparten entre criterios: un k ya evaluado no se recalcula.
     """
-    distancia, enlace = modelo.distancia, modelo.enlace
+    enlace = modelo.enlace
+    efectiva = modelo.distancia
+    distancia = distancia_solicitada or efectiva
 
     inicio = time.perf_counter()
     resultado = modelo.fit(X)
     t_fit = time.perf_counter() - inicio
 
     D = resultado.distancias_originales
-    X_db = normalizar_filas(X) if distancia == "cosine" else X
+    X_db = normalizar_filas(X) if efectiva == "cosine" else X
     cache: dict[int, dict] = {}
 
     def evaluar(k: int) -> dict:
@@ -121,6 +128,7 @@ def probar_combinacion(modelo, X, k_min: int, k_max: int, criterios: list[str],
                 "k": k,
                 "silhouette": silhouette_medio(D, etiquetas),
                 "davies_bouldin": davies_bouldin(X_db, etiquetas),
+                "calinski_harabasz": calinski_harabasz(X_db, etiquetas),
                 "tam_min": int(tam.min()),
                 "tam_max": int(tam.max()),
             }
@@ -146,7 +154,7 @@ def probar_combinacion(modelo, X, k_min: int, k_max: int, criterios: list[str],
 
     filas = []
     for k in sorted(cache):
-        fila = {"distancia": distancia, "enlace": enlace, **cache[k]}
+        fila = {"distancia": distancia, "distancia_efectiva": efectiva, "enlace": enlace, **cache[k]}
         for criterio in CRITERIOS:
             fila[f"visitado_{criterio}"] = criterio in busquedas and k in busquedas[criterio]["visitados"]
         filas.append(fila)
@@ -156,12 +164,14 @@ def probar_combinacion(modelo, X, k_min: int, k_max: int, criterios: list[str],
         mejor = cache[datos["k_mejor"]]
         fila = {
             "distancia": distancia,
+            "distancia_efectiva": efectiva,
             "enlace": enlace,
             "busqueda": metodo,
             "criterio": criterio,
             "k_mejor": datos["k_mejor"],
             "silhouette": mejor["silhouette"],
             "davies_bouldin": mejor["davies_bouldin"],
+            "calinski_harabasz": mejor["calinski_harabasz"],
             "tam_min": mejor["tam_min"],
             "tam_max": mejor["tam_max"],
             "evaluaciones_busqueda": len(datos["visitados"]),
@@ -207,7 +217,8 @@ def main(argv=None):
         print(f"Error de configuración: {e}")
         return
 
-    parser = argparse.ArgumentParser(description="Búsqueda binaria del mejor k con silhouette y Davies-Bouldin.")
+    exp = config.get("experimentos", {})
+    parser = argparse.ArgumentParser(description="Búsqueda del mejor k con silhouette, Davies-Bouldin y Calinski-Harabasz.")
     parser.add_argument("--distancias", nargs="+", default=[config["distancia"]],
                         choices=sorted(ClusteringJerarquico.DISTANCIAS))
     parser.add_argument("--enlaces", nargs="+", default=config["enlaces"],
@@ -215,13 +226,16 @@ def main(argv=None):
     parser.add_argument("--p", type=float, default=2.0, help="Exponente para la distancia minkowski.")
     parser.add_argument("--k_min", type=int, default=config["k_min"])
     parser.add_argument("--k_max", type=int, default=config["k_max"])
-    parser.add_argument("--criterios", nargs="+", default=list(CRITERIOS), choices=list(CRITERIOS))
-    parser.add_argument("--busqueda", choices=["mallado", "binaria"], default="mallado")
-    parser.add_argument("--puntos_malla", type=int, default=12,
+    parser.add_argument("--criterios", nargs="+", default=exp.get("criterios", list(CRITERIOS)), choices=list(CRITERIOS))
+    parser.add_argument("--busqueda", choices=["mallado", "binaria"], default=exp.get("busqueda", "mallado"))
+    parser.add_argument("--puntos_malla", type=int, default=exp.get("puntos_malla", 12),
                         help="Número de valores de k de la malla gruesa (solo con --busqueda mallado).")
-    parser.add_argument("--comprobar", action="store_true",
+    parser.add_argument("--comprobar", action="store_true", default=bool(exp.get("comprobar", False)),
                         help="Evalúa todos los k del rango y compara con el resultado de la búsqueda.")
     args = parser.parse_args(argv)
+    desconocidos = [c for c in args.criterios if c not in CRITERIOS]
+    if desconocidos:
+        parser.error(f"criterios no válidos: {desconocidos}. Usa: {list(CRITERIOS)}")
 
     raiz = Path(__file__).parent.parent
     archivo = raiz / config["entrada"] / "X_train.npz"
@@ -263,20 +277,20 @@ def main(argv=None):
         for enlace in args.enlaces:
             etiqueta = f"{distancia} | {enlace}"
             try:
-                modelo = ClusteringJerarquico(enlace=enlace, distancia=distancia, p=args.p)
+                modelo, X_modelo = preparar_modelo(enlace, distancia, X, args.p)
             except ValueError as e:
                 print(f"[{etiqueta}] omitida: {e}")
                 omitidas.append({"distancia": distancia, "enlace": enlace, "motivo": str(e)})
                 continue
 
-            filas, resumen = probar_combinacion(modelo, X, k_min, k_max, args.criterios, args.comprobar,
-                                              args.busqueda, args.puntos_malla)
+            filas, resumen = probar_combinacion(modelo, X_modelo, k_min, k_max, args.criterios, args.comprobar,
+                                                args.busqueda, args.puntos_malla, distancia)
             todas_filas.extend(filas)
             todo_resumen.extend(resumen)
 
             for r in resumen:
                 linea = (f"[{etiqueta}] {r['criterio']}: k={r['k_mejor']} "
-                         f"(sil={r['silhouette']:.4f}, db={r['davies_bouldin']:.4f}) "
+                         f"(sil={r['silhouette']:.4f}, db={r['davies_bouldin']:.4f}, ch={r['calinski_harabasz']:.2f}) "
                          f"con {r['evaluaciones_busqueda']} de {r['evaluaciones_barrido']} evaluaciones")
                 if args.comprobar:
                     linea += f" | exhaustivo: k={r['k_exhaustivo']} ({'coincide' if r['busqueda_acierta'] else 'NO coincide'})"

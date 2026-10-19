@@ -5,7 +5,8 @@
   "enlaces": [
     "single",
     "complete",
-    "average"
+    "average",
+    "ward"
   ],
   "k_min": 2,
   "k_max": 20,
@@ -13,5 +14,16 @@
   "repeticiones_estabilidad": 5,
   "semilla": 42,
   "generar_graficas": true,
-  "incluir_db": true
+  "incluir_db": true,
+  "ejecutar_experimentos": true,
+  "experimentos": {
+    "busqueda": "mallado",
+    "puntos_malla": 12,
+    "comprobar": false,
+    "criterios": [
+      "silhouette",
+      "davies_bouldin",
+      "calinski_harabasz"
+    ]
+  }
 }

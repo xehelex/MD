@@ -9,9 +9,9 @@ from scipy.sparse import load_npz
 
 from .banco import correlacion_silhouette_equilibrio, recorrer_rejilla
 
-# Coseno y euclidea dan el MISMO arbol con single y complete, porque solo usan
-# minimos y maximos y los vectores van normalizados L2. Con average y ward no,
-# asi que esas dos si se prueban por separado.
+# Con single y complete, coseno y euclidea dan el mismo arbol (solo usan min y
+# max, y los vectores van normalizados L2). Con average y ward no, asi que esas
+# si van por separado.
 COMBINACIONES = [
     ("single", "cosine", 2.0),
     ("complete", "cosine", 2.0),
@@ -22,7 +22,7 @@ COMBINACIONES = [
 
 COLUMNAS = ["matriz", "enlace", "distancia", "k", "silhouette", "equilibrio",
             "mayor_pct", "grupos_utiles", "instancias_sueltas", "tamanos",
-            "estabilidad", "cofenetica", "segundos_arbol"]
+            "estabilidad", "inconsistencia", "cofenetica", "segundos_arbol"]
 
 
 def main():
@@ -69,30 +69,27 @@ def main():
     (args.salida / "resumen.json").write_text(
         json.dumps(resumen, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    # Por pantalla, solo lo que se mira de un vistazo: el mejor k de cada
-    # combinacion segun silhouette, con su equilibrio al lado para que se vea
-    # si esa eleccion tiene sentido o es una particion degenerada.
-    cabecera = ["matriz", "enlace", "distancia", "k", "silhouette", "equilibrio", "mayor%"]
-    plantilla = "%-34s %-9s %-10s %3s %10s %10s %8s"
-    if args.estabilidad:
-        cabecera.append("estabil.")
-        plantilla += " %9s"
-    print(plantilla % tuple(cabecera))
-    print("-" * (102 if args.estabilidad else 92))
+    # Dos criterios en paralelo: el k que elige el silhouette y el que propone
+    # la forma del arbol. Si no coinciden, el equilibrio dice cual de los dos
+    # se esta llevando un 477/1/1/1.
+    print("%-30s %-9s %-10s | %3s %9s %9s | %3s %9s %9s" % (
+        "matriz", "enlace", "distancia",
+        "k", "silhou.", "equilib.", "k", "incons.", "equilib."))
+    print("%-30s %-9s %-10s | %-23s | %s" % ("", "", "", "segun SILHOUETTE", "segun el ARBOL"))
+    print("-" * 108)
     for nombre in matrices:
         for enlace, distancia, _ in COMBINACIONES:
             candidatas = [f for f in filas if f["matriz"] == nombre
                           and f["enlace"] == enlace and f["distancia"].startswith(distancia)]
             if not candidatas:
                 continue
-            mejor = max(candidatas, key=lambda f: f["silhouette"] if f["silhouette"] == f["silhouette"] else -1e9)
-            valores = [nombre[:34], enlace, distancia, mejor["k"],
-                       mejor["silhouette"], mejor["equilibrio"], mejor["mayor_pct"]]
-            linea = "%-34s %-9s %-10s %3d %10.3f %10.3f %7.1f%%"
-            if args.estabilidad:
-                valores.append(mejor["estabilidad"])
-                linea += " %9.3f"
-            print(linea % tuple(valores))
+            finito = lambda v: v if v == v else -1e9
+            por_sil = max(candidatas, key=lambda f: finito(f["silhouette"]))
+            por_arbol = max(candidatas, key=lambda f: finito(f["inconsistencia"]))
+            print("%-30s %-9s %-10s | %3d %9.3f %9.3f | %3d %9.2f %9.3f" % (
+                nombre[:30], enlace, distancia,
+                por_sil["k"], por_sil["silhouette"], por_sil["equilibrio"],
+                por_arbol["k"], por_arbol["inconsistencia"], por_arbol["equilibrio"]))
         print()
 
     r = resumen["correlacion_silhouette_equilibrio"]

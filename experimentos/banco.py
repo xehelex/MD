@@ -1,8 +1,7 @@
 """Banco de pruebas: recorre la rejilla de configuraciones y mide cada partición.
 
-El árbol de cada combinación de enlace y distancia se construye UNA vez y luego
-se corta en todos los k pedidos, que es lo que hace barato el barrido: lo caro es
-el árbol, no el corte.
+El árbol se construye UNA vez por combinación y se corta en todos los k. Lo
+caro es el árbol, no el corte.
 """
 from __future__ import annotations
 
@@ -16,14 +15,14 @@ from Clustering_jerarquico.metricas import (
     adjusted_rand_index, correlacion_cofenetica, silhouette_medio,
 )
 
+from .eleccion_k import inconsistencia
+
 
 def equilibrio(etiquetas: np.ndarray) -> float:
     """Entropía de los tamaños de grupo, normalizada entre 0 y 1.
 
-    Vale 1 cuando todos los grupos tienen el mismo tamaño y tiende a 0 cuando uno
-    se lo come todo. Hace falta porque el silhouette por sí solo no distingue una
-    partición repartida de otra con 477 instancias en un grupo y tres sueltas:
-    de hecho puntúa mejor la segunda.
+    1 = todos los grupos iguales, cerca de 0 = uno se lo come todo. Va al lado
+    del silhouette porque el silhouette solo no distingue 477/1/1/1 de nada.
     """
     tamanos = np.array(sorted(collections.Counter(np.asarray(etiquetas).tolist()).values()), dtype=float)
     if len(tamanos) < 2:
@@ -33,10 +32,9 @@ def equilibrio(etiquetas: np.ndarray) -> float:
 
 
 def grupos_utiles(etiquetas: np.ndarray, minimo: int = 10) -> tuple[int, int]:
-    """Cuántos grupos superan el tamaño mínimo y cuántas instancias quedan fuera.
+    """Grupos que superan el mínimo, e instancias que quedan fuera.
 
-    Un corte en k=4 que devuelve 477/1/1/1 tiene formalmente cuatro grupos pero
-    solo uno aprovechable; esto lo deja a la vista en la tabla.
+    Un 477/1/1/1 son cuatro grupos sobre el papel y uno de verdad.
     """
     cuenta = collections.Counter(np.asarray(etiquetas).tolist())
     utiles = [n for n in cuenta.values() if n >= minimo]
@@ -45,19 +43,13 @@ def grupos_utiles(etiquetas: np.ndarray, minimo: int = 10) -> tuple[int, int]:
 
 def estabilidad_por_k(X, resultado, enlace: str, distancia: str, p: float, ks,
                       repeticiones: int = 5, fraccion: float = 0.8, semilla: int = 42) -> dict:
-    """ARI medio entre la partición de referencia y la de un reajuste parcial.
+    """ARI medio entre la partición original y la de un reajuste al 80%.
 
-    En cada repetición se retira al azar el 20% de las filas, se reconstruye el
-    árbol con el resto y se compara contra la partición original restringida a
-    esas mismas filas. Si el modelo es estable, quitar una quinta parte de los
-    usuarios no deberia reorganizar los grupos.
+    El árbol de cada remuestreo se construye una vez y se compara en todos los
+    k; si no, esto no entra en la rejilla ni de broma.
 
-    El árbol de cada remuestreo se construye una sola vez y se compara en todos
-    los k, que es lo que hace viable meter esto en la rejilla.
-
-    Ojo al leerlo: una partición degenerada es trivialmente estable, porque
-    meter a todo el mundo en un grupo se reproduce siempre. Hay que mirarlo
-    junto al equilibrio, nunca solo.
+    Ojo: una partición degenerada sale estabilísima, porque meter a todos en un
+    grupo se reproduce siempre. Mirar junto al equilibrio, nunca sola.
     """
     rng = np.random.default_rng(semilla)
     n = X.shape[0]
@@ -95,10 +87,9 @@ def recorrer_rejilla(matrices: dict, combinaciones, ks, minimo: int = 10,
                      repeticiones: int = 0) -> list[dict]:
     """Ejecuta la rejilla completa y devuelve una fila por (matriz, enlace, k).
 
-    `matrices` es {nombre: X}. `combinaciones` es una lista de (enlace, distancia, p).
-    Cada árbol se construye una sola vez y se reutiliza para todos los k. Con
-    `repeticiones` > 0 se añade la columna de estabilidad, que multiplica el
-    tiempo por ese número porque obliga a reconstruir árboles.
+    `matrices` es {nombre: X}, `combinaciones` una lista de (enlace, distancia, p).
+    Con `repeticiones` > 0 se añade la estabilidad, que multiplica el tiempo por
+    ese número.
     """
     filas = []
     for nombre, X in matrices.items():
@@ -113,6 +104,9 @@ def recorrer_rejilla(matrices: dict, combinaciones, ks, minimo: int = 10,
             estable = (estabilidad_por_k(X, resultado, enlace, distancia, p, validos, repeticiones)
                        if repeticiones > 0 else {})
 
+            # Lo que opina el propio árbol sobre cada corte, sin mirar métricas.
+            inc = inconsistencia(resultado)
+
             for k in validos:
                 filas.append({
                     "matriz": nombre,
@@ -121,6 +115,7 @@ def recorrer_rejilla(matrices: dict, combinaciones, ks, minimo: int = 10,
                     "k": k,
                     **evaluar_corte(resultado, resultado.etiquetas(k), minimo),
                     "estabilidad": estable.get(k, float("nan")),
+                    "inconsistencia": float(inc[n - k]),
                     "cofenetica": cofenetica,
                     "segundos_arbol": round(segundos, 3),
                 })
@@ -130,8 +125,7 @@ def recorrer_rejilla(matrices: dict, combinaciones, ks, minimo: int = 10,
 def correlacion_silhouette_equilibrio(filas: list[dict]) -> float:
     """Pearson entre silhouette y equilibrio sobre toda la rejilla.
 
-    Si sale muy negativa, el silhouette está premiando justo las particiones que
-    no sirven, y elegir modelo por esa métrica es elegir al revés.
+    Si sale muy negativa, elegir modelo por silhouette es elegir al revés.
     """
     s = np.array([f["silhouette"] for f in filas], dtype=float)
     e = np.array([f["equilibrio"] for f in filas], dtype=float)

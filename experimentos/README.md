@@ -1,100 +1,80 @@
-# Cómo ejecutar el banco de pruebas
+# Banco de pruebas
 
-Este programa compara configuraciones de clustering jerárquico sobre una o
-varias matrices ya vectorizadas y produce una tabla con la calidad de cada
-partición. Sirve para responder con números a qué enlace, qué distancia y qué
-número de grupos funcionan mejor con nuestros datos.
+Compara configuraciones de clustering jerárquico sobre una o varias matrices ya
+vectorizadas y saca una tabla con la calidad de cada partición. Solo lee los
+`X_train.npz` que le indiques; no recalcula nada.
 
-No recalcula vectorizaciones ni modifica nada: solo lee los `X_train.npz` que
-le indiques.
+## Ejecutar
 
-## 1. Qué necesitas
-
-Python 3.10 o superior, el paquete `Clustering_jerarquico` (de donde salen el
-algoritmo y las métricas) y al menos una carpeta de resultados de vectorización.
-Todo se ejecuta desde la raíz del proyecto, la carpeta `MD`.
+Desde la carpeta `MD`:
 
 ```powershell
 python -m pip install -r experimentos/requirements.txt
-```
-
-## 2. Ejecutar
-
-Sobre una sola matriz:
-
-```powershell
 python -m experimentos --entrada resultados_tfidf
 ```
 
-Comparando varias, repitiendo `--entrada`:
+Repite `--entrada` para comparar varias matrices:
 
 ```powershell
-python -m experimentos --entrada resultados_tfidf --entrada resultados_tfidf_limpio_sinvacias
+python -m experimentos --entrada resultados_tfidf --entrada resultados_tfidf_limpio
 ```
 
-Con los 480 usuarios de entrenamiento tarda alrededor de medio minuto por cada
-dos matrices.
+Con 480 usuarios tarda unos 15 s por matriz, o un minuto si pides estabilidad.
 
-## 3. Opciones
+## Opciones
 
-| Opción | Por defecto | Para qué |
+| Opción | Por defecto | |
 |---|---|---|
-| `--entrada` | obligatoria | Carpeta con `X_train.npz`. Se puede repetir. |
+| `--entrada` | obligatoria | Carpeta con `X_train.npz`. Repetible. |
 | `--salida` | `resultados_experimentos` | Dónde dejar la tabla. |
-| `--k-min` / `--k-max` | 2 y 20 | Rango de número de grupos a barrer. |
-| `--minimo` | 10 | A partir de cuántos miembros un grupo cuenta como aprovechable. |
+| `--k-min` / `--k-max` | 2 y 20 | Rango de k. |
+| `--minimo` | 10 | Tamaño a partir del cual un grupo cuenta. |
+| `--estabilidad` | 0 | Repeticiones de remuestreo. Multiplica el tiempo por N. |
 
-## 4. Qué devuelve
+## Salida
 
-En la carpeta de salida quedan dos archivos:
+`rejilla.csv`, una fila por matriz × enlace × k:
 
-| Archivo | Contenido |
+| Columna | |
 |---|---|
-| `rejilla.csv` | Una fila por cada combinación de matriz, enlace, distancia y k. |
-| `resumen.json` | Parámetros usados y la correlación entre silhouette y equilibrio. |
+| `silhouette` | Métrica interna clásica. |
+| `equilibrio` | Entropía de los tamaños, 0 a 1. 1 = grupos iguales. |
+| `mayor_pct` | % de instancias en el grupo mayor. |
+| `grupos_utiles` | Grupos por encima de `--minimo`. |
+| `instancias_sueltas` | Las que caen por debajo. |
+| `tamanos` | Los seis grupos mayores. |
+| `estabilidad` | ARI contra un reajuste al 80%. |
+| `inconsistencia` | Cuánto destaca esa fusión frente a su vecindario. |
+| `cofenetica` | Distancias originales contra alturas del árbol. |
+| `segundos_arbol` | Coste de construir el árbol. |
 
-Las columnas de `rejilla.csv`:
+Y `resumen.json` con los parámetros y la correlación silhouette-equilibrio.
 
-| Columna | Significado |
-|---|---|
-| `silhouette` | Métrica interna clásica. Cuanto mayor, supuestamente mejor. |
-| `equilibrio` | Entropía normalizada de los tamaños de grupo: 1 si todos miden igual, cerca de 0 si uno se lo come todo. |
-| `mayor_pct` | Porcentaje de instancias que caen en el grupo más grande. |
-| `grupos_utiles` | Cuántos grupos superan `--minimo` miembros. |
-| `instancias_sueltas` | Cuántas instancias quedan en grupos por debajo de ese mínimo. |
-| `tamanos` | Los seis grupos mayores, de más a menos. |
-| `cofenetica` | Correlación entre las distancias originales y las alturas del árbol. |
-| `segundos_arbol` | Lo que costó construir ese árbol. |
+**El `equilibrio` va al lado del `silhouette` porque el silhouette solo no
+distingue una partición repartida de un 477/1/1/1: de hecho puntúa mejor la
+segunda.** Por el mismo motivo el resumen por pantalla enseña el k que elige el
+silhouette y el que propone el árbol, uno al lado del otro.
 
-## Por qué hay una columna de equilibrio
+## Los otros dos módulos
 
-Porque el silhouette por sí solo no distingue una partición repartida de otra
-degenerada, y de hecho puntúa mejor la segunda. Con `average` y k=4 sobre la
-matriz original, 476 de 480 usuarios caen en un mismo grupo y los otros tres
-quedan solos: esa configuración obtiene el silhouette más alto de toda la
-rejilla. Mirando el equilibrio al lado, 0,041 sobre 1, se ve de inmediato que no
-sirve.
+```python
+from experimentos.corte import cortar_por_tamano
+from experimentos.eleccion_k import sugerir_k
 
-El desglose por enlace matiza el asunto. Dentro de un mismo enlace, silhouette y
-equilibrio apenas se relacionan, y con `ward` la correlación llega a ser
-positiva. El problema aparece al comparar **entre** enlaces: single y average
-puntúan alto con equilibrio ínfimo, ward lo contrario. Como elegir modelo es
-precisamente comparar entre enlaces, conviene mirar siempre las dos columnas
-juntas.
-
-## Qué no hace todavía
-
-- No calcula Davies-Bouldin, que obliga a densificar la matriz y con 36.000
-  atributos resulta caro. Habría que medirlo sobre un espacio reducido.
-- No mide estabilidad por remuestreo, aunque `Clustering_jerarquico` ya tiene
-  con qué hacerlo.
-
-## Comprobar la instalación
-
-```powershell
-python -m unittest experimentos.test_banco
-python -m experimentos --help
+sugerir_k(resultado)                                  # [(10, 3.13), (9, 2.4), ...]
+cortar_por_tamano(resultado, minimo=8, max_grupos=10) # (etiquetas, informe)
 ```
 
-Si aparece `No module named experimentos`, comprueba que estás en la carpeta
-`MD` y no dentro de `experimentos`.
+`sugerir_k` lee la forma del árbol en vez de barrer k. Da candidatos, no una
+respuesta: con datos sintéticos de k conocido acierta en el top-2, no siempre
+en el primero.
+
+`cortar_por_tamano` pide grupos de al menos `minimo` miembros y aparta el resto
+con etiqueta `-1`. Ojo con el umbral: subirlo borra los grupos pequeños, y aquí
+los pequeños suelen ser los interesantes.
+
+## Pruebas
+
+```powershell
+python -m unittest discover -s experimentos -t .
+```

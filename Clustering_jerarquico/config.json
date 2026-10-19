@@ -1,6 +1,6 @@
 {
-  "entrada": "resultados_tfidf",
-  "salida": "resultados_clustering",
+  "entrada": "resultados_tfidf_completo",
+  "salida": "resultados_clustering_completo",
   "distancia": "cosine",
   "enlaces": [
     "single",

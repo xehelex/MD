@@ -19,7 +19,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 import numpy as np
-from scipy.sparse import load_npz
+from vectorizacion.matrices import cargar_matriz
 from .algoritmo import ClusteringJerarquico
 from .cli import cargar_configuracion
 from .metricas import silhouette_medio, davies_bouldin, correlacion_cofenetica, normalizar_filas
@@ -208,6 +208,7 @@ def main(argv=None):
         return
 
     parser = argparse.ArgumentParser(description="Búsqueda binaria del mejor k con silhouette y Davies-Bouldin.")
+    parser.add_argument("--entrada", type=Path, default=Path(config["entrada"]), help="Carpeta con X.npz (dispersa) o X.npy (densa).")
     parser.add_argument("--distancias", nargs="+", default=[config["distancia"]],
                         choices=sorted(ClusteringJerarquico.DISTANCIAS))
     parser.add_argument("--enlaces", nargs="+", default=config["enlaces"],
@@ -224,12 +225,10 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     raiz = Path(__file__).parent.parent
-    archivo = raiz / config["entrada"] / "X_train.npz"
-    if not archivo.exists():
-        print(f"No existe el archivo de entrenamiento: {archivo}")
-        return
-
-    X = load_npz(archivo).tocsr()
+    try:
+        X = cargar_matriz(raiz / args.entrada)
+    except (OSError, ValueError) as error:
+        parser.error(str(error))
     n = X.shape[0]
 
     k_min = args.k_min
@@ -244,6 +243,7 @@ def main(argv=None):
     (carpeta / "plots").mkdir(parents=True, exist_ok=True)
 
     parametros = {
+        "entrada": str(args.entrada),
         "instancias": int(n),
         "atributos": int(X.shape[1]),
         "distancias": args.distancias,

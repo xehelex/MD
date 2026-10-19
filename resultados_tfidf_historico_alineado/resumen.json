@@ -1,0 +1,79 @@
+{
+  "modo": "historico_alineado",
+  "configuracion": {
+    "entrada": "resultados_tfidf",
+    "referencia": "resultados_tfidf_completo",
+    "salida": "resultados_tfidf_historico_alineado"
+  },
+  "usuarios": 598,
+  "dimensiones": 37246,
+  "matriz": {
+    "archivo": "X.npz",
+    "shape": [
+      598,
+      37246
+    ],
+    "nnz": 1042954
+  },
+  "origen": {
+    "shape_train": [
+      480,
+      37246
+    ],
+    "shape_test": [
+      120,
+      37246
+    ],
+    "archivos_sha256": {
+      "X_train.npz": "a374c9211fca5b487c7af44bc8b666f1802bbea770d5a49c0cb91b3bc9791f06",
+      "X_test.npz": "de1efca4b1ebd3e5e90cd729f4b49ecb7fc41bf52b3f8de3a8c3e85fd9e08bf5",
+      "usuarios_train.json": "0c0b0f4711b1866eb5c9a05dd004daee7d3de1cb920b5790e9cfbf29a598423f",
+      "usuarios_test.json": "dee62ed535b277ac0dc7ecb806231d3e46bf2ec4b7dc917c07dd56d4de54c3cc",
+      "vectorizador.joblib": "218ded7b5f569362e246fc8ea8bde0d008ff485787c0af39e1c5f548f5d309ed",
+      "resumen.json": "93400e3f737dfe15f192bfb88c5968a1daac1dfa9155a7ae5347a9ff8574b433"
+    },
+    "resumen_original": {
+      "sklearn_version": "1.8.0",
+      "configuracion": {
+        "datos": ".",
+        "salida": "resultados_tfidf",
+        "test_size": 0.2,
+        "seed": 42,
+        "ngramas": 1,
+        "min_df": 3,
+        "max_df": 1.0,
+        "max_features": null,
+        "sublinear_tf": false
+      },
+      "usuarios": 600,
+      "publicaciones_totales": 291787,
+      "publicaciones_utiles": 291778,
+      "dimensiones": 37246,
+      "train": {
+        "shape": [
+          480,
+          37246
+        ],
+        "nnz": 842989,
+        "usuarios_vector_cero": []
+      },
+      "test": {
+        "shape": [
+          120,
+          37246
+        ],
+        "nnz": 200058,
+        "usuarios_vector_cero": []
+      }
+    }
+  },
+  "usuarios_referencia_sha256": "2f185f1151ff1729b43e2aff5faface0a4ac2a99f88749d0b94482bcf9442770",
+  "usuarios_excluidos": [
+    "subject2538",
+    "subject2569"
+  ],
+  "usuarios_vector_cero": [],
+  "ajuste_tfidf": "Se conserva el modelo histórico ajustado solo con train; no se recalculan vocabulario, IDF, TF ni normalización.",
+  "usuarios_ajuste_original": 480,
+  "alcance": "Mismos usuarios y orden que la referencia. El preprocesamiento y la población de ajuste difieren de las representaciones nuevas; esta comparación evalúa las variantes completas."
+}

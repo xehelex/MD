@@ -307,7 +307,7 @@ así que con cualquier otra métrica no debe dejarse construir.</p>
 
 def main():
     raiz = Path(__file__).parent.parent
-    X = load_npz(raiz / "resultados_tfidf" / "X_train.npz").tocsr()
+    X = load_npz(raiz / "resultados_tfidf_completo" / "X.npz").tocsr()
     A = X.toarray()
     n, d = X.shape
 
@@ -329,7 +329,7 @@ def main():
     rechazos = contrastar_rechazos()
     coste = medir_coste(A, [60, 120, 240])
 
-    destino = raiz / "resultados_clustering" / "validacion.html"
+    destino = raiz / "resultados_clustering_completo" / "validacion.html"
     destino.parent.mkdir(parents=True, exist_ok=True)
     destino.write_text(construir_html(enlaces, distancias, rechazos, coste, n, d), encoding="utf-8")
 

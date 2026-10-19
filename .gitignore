@@ -25,7 +25,7 @@ resultados_clustering/validacion.html
 
 # Matrices regeneradas en local para probar la limpieza del texto y las
 # variantes de representacion. Se rehacen con:
-#   python -m vectorizacion --datos <ruta-xml> --salida <carpeta> [--quitar-vacias] [--sublinear-tf]
+#   python -m vectorizacion --datos <ruta-csv-preprocesado> --salida <carpeta> [--quitar-vacias] [--sublinear-tf]
 resultados_tfidf_limpio/
 resultados_tfidf_limpio_sinvacias/
 resultados_var_*/
@@ -37,3 +37,6 @@ resultados_experimentos*/
 data_*/
 subject*.xml
 *.zip
+
+# La validación completa se regenera; conservar el informe anterior.
+resultados_clustering_completo/validacion.html

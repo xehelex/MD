@@ -93,15 +93,20 @@ def cargar_historiales(carpeta: str | Path) -> list[Historial]:
         resultado.append(Historial(usuario, archivo.name, tuple(textos), len(publicaciones)))
     return resultado
 
-def cargar_historiales_csv(ruta_csv: str | Path) -> list[Historial]:
-    """Carga publicaciones ya preprocesadas y las agrupa por usuario."""
+def cargar_historiales_csv(ruta_csv: str | Path, informe: dict | None = None) -> list[Historial]:
+    """Agrupa textos preprocesados por ID en orden lexicográfico estable.
+
+    Si se proporciona informe, registra usuarios/filas excluidos por falta de
+    ID o texto. Solo puede informar de usuarios presentes en este CSV, no de los
+    que el preprocesador haya descartado antes de exportarlo.
+    """
 
     ruta_csv = Path(ruta_csv)
 
     if not ruta_csv.is_file():
         raise FileNotFoundError(f"No se encuentra el CSV: {ruta_csv}")
 
-    df = pd.read_csv(ruta_csv, dtype={"subject_id": str})
+    df = pd.read_csv(ruta_csv, dtype={"subject_id": str}, keep_default_na=False)
 
     columnas = {"subject_id", "text_Clustering"}
     faltantes = columnas - set(df.columns)
@@ -116,6 +121,9 @@ def cargar_historiales_csv(ruta_csv: str | Path) -> list[Historial]:
         df["text_Clustering"].fillna("").astype(str).str.strip()
     )
 
+    filas_entrada = len(df)
+    ids_entrada = set(df.loc[df["subject_id"] != "", "subject_id"])
+    totales = df.groupby("subject_id").size().to_dict()
     df = df[
         (df["subject_id"] != "") &
         (df["text_Clustering"] != "")
@@ -132,7 +140,7 @@ def cargar_historiales_csv(ruta_csv: str | Path) -> list[Historial]:
 
     resultado = []
 
-    for usuario, grupo in df.groupby("subject_id", sort=False):
+    for usuario, grupo in df.groupby("subject_id", sort=True):
         publicaciones = tuple(grupo["text_Clustering"].tolist())
 
         if publicaciones:
@@ -141,10 +149,18 @@ def cargar_historiales_csv(ruta_csv: str | Path) -> list[Historial]:
                     usuario=usuario,
                     archivo=str(ruta_csv),
                     publicaciones=publicaciones,
-                    publicaciones_totales=len(publicaciones),
+                    publicaciones_totales=int(totales[usuario]),
                 )
             )
 
+    if informe is not None:
+        informe.update({
+            "filas_csv": filas_entrada,
+            "filas_descartadas": filas_entrada - len(df),
+            "usuarios_en_csv": len(ids_entrada),
+            "usuarios_descartados_sin_texto": sorted(ids_entrada - {u.usuario for u in resultado}),
+            "orden_usuarios": "ID lexicográfico ascendente",
+        })
     if not resultado:
         raise ValueError("El CSV no contiene usuarios con textos útiles.")
 

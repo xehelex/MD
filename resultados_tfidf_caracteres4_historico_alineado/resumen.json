@@ -1,0 +1,85 @@
+{
+  "modo": "historico_alineado",
+  "configuracion": {
+    "entrada": "resultados_tfidf_caracteres4",
+    "referencia": "resultados_tfidf_completo",
+    "salida": "resultados_tfidf_caracteres4_historico_alineado"
+  },
+  "usuarios": 598,
+  "dimensiones": 138112,
+  "matriz": {
+    "archivo": "X.npz",
+    "shape": [
+      598,
+      138112
+    ],
+    "nnz": 5763098
+  },
+  "origen": {
+    "shape_train": [
+      480,
+      138112
+    ],
+    "shape_test": [
+      120,
+      138112
+    ],
+    "archivos_sha256": {
+      "X_train.npz": "5cf307b07e7896ae91ce8f088b9a39d2c51d1998404bfdd64a0382b745e2887d",
+      "X_test.npz": "4757febaf633c73d2b3eb0a3a53733489494534c38b2be43b67095a016fc24c0",
+      "usuarios_train.json": "0c0b0f4711b1866eb5c9a05dd004daee7d3de1cb920b5790e9cfbf29a598423f",
+      "usuarios_test.json": "dee62ed535b277ac0dc7ecb806231d3e46bf2ec4b7dc917c07dd56d4de54c3cc",
+      "vectorizador.joblib": "bf76b834961cd54cc5c60612b6afdc5334ffa6eae79c8bf1109895ad2034113a",
+      "resumen.json": "2a2b464f1f7eea2af41e8fbd6929725116249fae81822e9ec00f031a575d1e90"
+    },
+    "resumen_original": {
+      "sklearn_version": "1.8.0",
+      "configuracion": {
+        "datos": ".",
+        "salida": "resultados_tfidf_caracteres4",
+        "test_size": 0.2,
+        "seed": 42,
+        "representacion": "caracteres4",
+        "ngramas": 1,
+        "min_df": 3,
+        "max_df": 1.0,
+        "max_features": null,
+        "sublinear_tf": false
+      },
+      "usuarios": 600,
+      "publicaciones_totales": 291787,
+      "publicaciones_utiles": 291778,
+      "dimensiones": 138112,
+      "analizador": "char",
+      "ngram_range": [
+        4,
+        4
+      ],
+      "train": {
+        "shape": [
+          480,
+          138112
+        ],
+        "nnz": 4652011,
+        "usuarios_vector_cero": []
+      },
+      "test": {
+        "shape": [
+          120,
+          138112
+        ],
+        "nnz": 1112158,
+        "usuarios_vector_cero": []
+      }
+    }
+  },
+  "usuarios_referencia_sha256": "2f185f1151ff1729b43e2aff5faface0a4ac2a99f88749d0b94482bcf9442770",
+  "usuarios_excluidos": [
+    "subject2538",
+    "subject2569"
+  ],
+  "usuarios_vector_cero": [],
+  "ajuste_tfidf": "Se conserva el modelo histórico ajustado solo con train; no se recalculan vocabulario, IDF, TF ni normalización.",
+  "usuarios_ajuste_original": 480,
+  "alcance": "Mismos usuarios y orden que la referencia. El preprocesamiento y la población de ajuste difieren de las representaciones nuevas; esta comparación evalúa las variantes completas."
+}

@@ -5,7 +5,7 @@ import csv
 import json
 from pathlib import Path
 
-from scipy.sparse import load_npz
+from vectorizacion.matrices import cargar_matriz, cargar_usuarios
 
 from .banco import correlacion_silhouette_equilibrio, recorrer_rejilla
 
@@ -25,10 +25,10 @@ COLUMNAS = ["matriz", "enlace", "distancia", "k", "silhouette", "equilibrio",
             "estabilidad", "inconsistencia", "cofenetica", "segundos_arbol"]
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--entrada", type=Path, action="append", required=True,
-                        help="Carpeta con X_train.npz. Repetir para comparar varias.")
+                        help="Carpeta con X.npz (dispersa) o X.npy (densa), y usuarios.json. Repetir para comparar varias.")
     parser.add_argument("--salida", type=Path, default=Path("resultados_experimentos"))
     parser.add_argument("--k-min", type=int, default=2)
     parser.add_argument("--k-max", type=int, default=20)
@@ -37,17 +37,33 @@ def main():
     parser.add_argument("--estabilidad", type=int, default=0, metavar="N",
                         help="Repeticiones de remuestreo al 80%% para medir estabilidad. "
                              "0 la desactiva; cada repetición reconstruye todos los árboles.")
-    args = parser.parse_args()
+    parser.add_argument("--comprobar-entradas", action="store_true",
+                        help="Comprueba matrices e IDs y termina sin ejecutar clustering ni guardar resultados.")
+    args = parser.parse_args(argv)
 
     if not 2 <= args.k_min <= args.k_max:
         parser.error("Tiene que cumplirse 2 <= k-min <= k-max.")
 
     matrices = {}
+    ids_referencia = None
     for carpeta in args.entrada:
-        archivo = carpeta / "X_train.npz"
-        if not archivo.is_file():
-            parser.error(f"No existe {archivo}")
-        matrices[carpeta.name] = load_npz(archivo).tocsr()
+        try:
+            X = cargar_matriz(carpeta)
+            ids = [u["usuario"] for u in cargar_usuarios(carpeta, X.shape[0])]
+        except (OSError, ValueError) as error:
+            parser.error(str(error))
+        if ids_referencia is not None and ids != ids_referencia:
+            parser.error("Las representaciones deben contener los mismos usuarios en el mismo orden.")
+        if carpeta.name in matrices:
+            parser.error(f"Nombre de entrada repetido: {carpeta.name}.")
+        ids_referencia = ids
+        matrices[carpeta.name] = X
+
+    if args.comprobar_entradas:
+        for nombre, X in matrices.items():
+            print(f"{nombre}: {X.shape[0]} usuarios x {X.shape[1]} dimensiones")
+        print(f"{len(matrices)} representaciones verificadas: mismos usuarios y orden de filas.")
+        return
 
     ks = list(range(args.k_min, args.k_max + 1))
     filas = recorrer_rejilla(matrices, COMBINACIONES, ks, minimo=args.minimo,

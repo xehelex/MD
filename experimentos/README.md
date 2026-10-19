@@ -1,8 +1,17 @@
 # Banco de pruebas
 
+Para comparar las **ocho representaciones preparadas**, sigue
+[GUIA_TODAS.md](GUIA_TODAS.md). Comprobación rápida desde la raíz de `MD`:
+
+```powershell
+python -m experimentos.todas --comprobar-entradas
+python -m experimentos.todas --estabilidad 5 --salida resultados_experimentos_todas_estabilidad
+```
+
 Compara configuraciones de clustering jerárquico sobre una o varias matrices ya
 vectorizadas y saca una tabla con la calidad de cada partición. Solo lee los
-`X_train.npz` que le indiques; no recalcula nada.
+`X.npz` (dispersa) o `X.npy` (densa) que le indiques; no reajusta la vectorización.
+Cada carpeta debe contener exactamente una matriz y su `usuarios.json`.
 
 ## Ejecutar
 
@@ -10,26 +19,27 @@ Desde la carpeta `MD`:
 
 ```powershell
 python -m pip install -r experimentos/requirements.txt
-python -m experimentos --entrada resultados_tfidf
+python -m experimentos --entrada resultados_tfidf_completo
 ```
 
 Repite `--entrada` para comparar varias matrices:
 
 ```powershell
-python -m experimentos --entrada resultados_tfidf --entrada resultados_tfidf_limpio
+python -m experimentos --entrada resultados_tfidf_completo --entrada resultados_tfidf_caracteres4_completo
 ```
 
-Con 480 usuarios tarda unos 15 s por matriz, o un minuto si pides estabilidad.
+El tiempo depende del número de usuarios y de la representación. La estabilidad reconstruye árboles adicionales.
 
 ## Opciones
 
 | Opción | Por defecto | |
 |---|---|---|
-| `--entrada` | obligatoria | Carpeta con `X_train.npz`. Repetible. |
+| `--entrada` | obligatoria | Carpeta con `X.npz` o `X.npy` y `usuarios.json`. Repetible. |
 | `--salida` | `resultados_experimentos` | Dónde dejar la tabla. |
 | `--k-min` / `--k-max` | 2 y 20 | Rango de k. |
 | `--minimo` | 10 | Tamaño a partir del cual un grupo cuenta. |
 | `--estabilidad` | 0 | Repeticiones de remuestreo. Multiplica el tiempo por N. |
+| `--comprobar-entradas` | desactivada | Valida matrices e IDs sin ejecutar clustering ni guardar resultados. |
 
 ## Salida
 
@@ -78,3 +88,19 @@ los pequeños suelen ser los interesantes.
 ```powershell
 python -m unittest discover -s experimentos -t .
 ```
+
+## Matrices completas
+
+Cada entrada contiene todos los usuarios disponibles tras el preprocesamiento. Las carpetas antiguas con train/test se conservan como resultados históricos; no se cargan automáticamente. La estabilidad usa submuestreo sin reemplazo sobre vectores fijos, sin reajustar TF-IDF ni SVD. Al comparar se comprueba que las representaciones tengan los mismos usuarios y orden de filas.
+
+## Comparar TF-IDF con SVD
+
+Primero genera SVD siguiendo el README de `vectorizacion`. Luego:
+
+```powershell
+python -m experimentos --entrada resultados_tfidf_completo --entrada resultados_tfidf_completo_svd100 --salida resultados_experimentos_svd_palabras
+python -m experimentos --entrada resultados_tfidf_caracteres4_completo --entrada resultados_tfidf_caracteres4_completo_svd100 --salida resultados_experimentos_svd_caracteres
+```
+
+Las matrices SVD se cargan como arrays densos, sin convertirlas a dispersas.
+Las métricas y el remuestreo son los mismos que para TF-IDF.

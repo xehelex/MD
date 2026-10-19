@@ -3,6 +3,19 @@ from __future__ import annotations
 import numpy as np
 
 
+def normalizar_filas(X):
+    """Devuelve una copia L2 normalizada, conservando dispersión y filas cero."""
+    from scipy import sparse
+    if sparse.issparse(X):
+        A = X.astype(float).tocsr()
+        normas = np.sqrt(A.multiply(A).sum(axis=1)).A1
+        inversas = np.divide(1.0, normas, out=np.zeros_like(normas), where=normas != 0)
+        return A.multiply(inversas[:, None]).tocsr()
+    A = np.asarray(X, dtype=float)
+    normas = np.linalg.norm(A, axis=1, keepdims=True)
+    return np.divide(A, normas, out=np.zeros_like(A), where=normas != 0)
+
+
 def silhouette_medio(D: np.ndarray, etiquetas: np.ndarray) -> float:
     """Calcula el silhouette medio pasándole una matriz de distancias ya calculada.
 

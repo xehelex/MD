@@ -135,7 +135,8 @@ class TestSVD(unittest.TestCase):
         resultado = json.loads(archivo.read_text(encoding="utf-8"))
         self.assertEqual(resultado["parametros"]["instancias"], 6)
         self.assertEqual(resultado["parametros"]["atributos"], 2)
-        self.assertEqual(len(resultado["resumen"]), 2)
+        self.assertEqual({r["criterio"] for r in resultado["resumen"]},
+                         {"silhouette", "davies_bouldin", "calinski_harabasz"})
 
 
 if __name__ == "__main__":

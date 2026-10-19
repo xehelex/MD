@@ -18,6 +18,10 @@ python -m venv .venv
 
 Si ya tienes un entorno con las dependencias, puedes usar su Python.
 
+Los modelos SVD `svd.joblib` se guardan en Git LFS. Si vas a cargarlos con
+`joblib.load`, instala Git LFS y ejecuta `git lfs install` y `git lfs pull`
+desde la raíz de `MD`. Las matrices de experimentos se descargan con Git normal.
+
 ## 2. Tener los datos preprocesados
 
 La entrada predeterminada es `output/data_preprocesado.csv`, con las columnas

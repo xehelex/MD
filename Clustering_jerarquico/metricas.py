@@ -3,19 +3,6 @@ from __future__ import annotations
 import numpy as np
 
 
-def normalizar_filas(X):
-    """Devuelve una copia L2 normalizada, conservando dispersión y filas cero."""
-    from scipy import sparse
-    if sparse.issparse(X):
-        A = X.astype(float).tocsr()
-        normas = np.sqrt(A.multiply(A).sum(axis=1)).A1
-        inversas = np.divide(1.0, normas, out=np.zeros_like(normas), where=normas != 0)
-        return A.multiply(inversas[:, None]).tocsr()
-    A = np.asarray(X, dtype=float)
-    normas = np.linalg.norm(A, axis=1, keepdims=True)
-    return np.divide(A, normas, out=np.zeros_like(A), where=normas != 0)
-
-
 def silhouette_medio(D: np.ndarray, etiquetas: np.ndarray) -> float:
     """Calcula el silhouette medio pasándole una matriz de distancias ya calculada.
 
@@ -137,3 +124,56 @@ def adjusted_rand_index(etiquetas_a: np.ndarray, etiquetas_b: np.ndarray) -> flo
         return 1.0
 
     return float((suma_celdas - esperado) / denominador)
+
+def normalizar_filas(X):
+    """Normaliza cada fila a norma L2 igual a 1, sin usar sklearn."""
+    from scipy import sparse
+
+    if sparse.issparse(X):
+        normas = np.sqrt(np.asarray(X.multiply(X).sum(axis=1)).ravel())
+        inversas = np.zeros_like(normas, dtype=float)
+        np.divide(1.0, normas, out=inversas, where=normas != 0)
+        return sparse.diags(inversas) @ X
+
+    X = np.asarray(X, dtype=float)
+    normas = np.linalg.norm(X, axis=1, keepdims=True)
+    return np.divide(X, normas, out=np.zeros_like(X), where=normas != 0)
+
+
+def calinski_harabasz(X, etiquetas: np.ndarray) -> float:
+    """Calcula el índice de Calinski-Harabasz (cuanto mayor, mejor).
+
+    Cociente entre la dispersión entre clusters (B) y la dispersión interna (W),
+    ponderadas por sus grados de libertad: (B / (k - 1)) / (W / (n - k)).
+    No densifica X: con matrices dispersas solo se materializan los k centroides.
+    Devuelve NaN si hay menos de dos clusters, si cada instancia está sola o si W = 0.
+    """
+    from scipy import sparse
+
+    labels = np.asarray(etiquetas)
+    n = len(labels)
+    grupos, inv = np.unique(labels, return_inverse=True)
+    k = len(grupos)
+    if k < 2 or k >= n:
+        return float("nan")
+
+    es_sparse = sparse.issparse(X)
+    A = X.tocsr().astype(np.float64) if es_sparse else np.asarray(X, dtype=float)
+    if A.shape[0] != n:
+        raise ValueError("X y las etiquetas tienen que tener el mismo número de filas.")
+
+    miembros = sparse.csr_matrix((np.ones(n), (inv, np.arange(n))), shape=(k, n))
+    sumas = miembros @ A
+    sumas = sumas.toarray() if es_sparse else np.asarray(sumas)
+
+    tam = np.bincount(inv).astype(float)
+    centroides = sumas / tam[:, None]
+    media = np.asarray(A.sum(axis=0)).ravel() / n
+
+    entre = float((tam * ((centroides - media) ** 2).sum(axis=1)).sum())
+    total = float(A.multiply(A).sum()) if es_sparse else float((A * A).sum())
+    dentro = max(total - float((tam * (centroides ** 2).sum(axis=1)).sum()), 0.0)
+
+    if dentro <= 1e-12:
+        return float("nan")
+    return float((entre / (k - 1)) / (dentro / (n - k)))

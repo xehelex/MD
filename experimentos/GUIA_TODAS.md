@@ -22,6 +22,12 @@ rechaza la comparación si las listas de usuarios no coinciden.
 
 ## Preparar el entorno y comprobar archivos
 
+Actualiza el repositorio con `git pull --ff-only`. Los modelos SVD `.joblib` se
+distribuyen con Git LFS. Para utilizarlos al transformar usuarios nuevos, instala
+Git LFS y ejecuta `git lfs install` y `git lfs pull` desde `MD`.
+Las matrices y los listados de usuarios están en Git normal: los experimentos
+sobre usuarios ya vectorizados no necesitan descargar los modelos LFS.
+
 Si aún no tienes un entorno, créalo con `python -m venv .venv`. Después:
 
 ```powershell
@@ -53,6 +59,17 @@ El lanzador admite las mismas opciones que `python -m experimentos`, como
 `--k-min`, `--k-max`, `--minimo` y `--salida`. El remuestreo toma el 80 % de
 usuarios sin reemplazo y mantiene los vectores fijos: no vuelve a ajustar
 TF-IDF ni SVD. Valora conjuntamente silhouette, equilibrio, tamaños y estabilidad.
+
+La interfaz de `Clustering_jerarquico` de los compañeros también acepta todas
+estas carpetas y conserva sus gráficas, Ward, Davies-Bouldin y Calinski-Harabasz:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r Clustering_jerarquico/requirements.txt
+.\.venv\Scripts\python.exe -m Clustering_jerarquico --entrada resultados_tfidf_completo_svd95pct --salida resultados_clustering_svd95pct
+```
+
+Su configuración controla los enlaces, el rango de k y los experimentos
+posteriores. Estos utilizan la misma entrada y salida seleccionadas en el comando.
 
 ## Interpretar los históricos
 

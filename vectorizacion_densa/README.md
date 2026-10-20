@@ -1,0 +1,1 @@
+.\.venvMD\Scripts\python.exe -m vectorizacion_densa

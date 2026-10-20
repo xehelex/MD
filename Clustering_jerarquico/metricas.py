@@ -1,183 +1,202 @@
-"""Métricas para evaluar una partición: silhouette, cofenética, Davies-Bouldin, Calinski-Harabasz y ARI."""
-from __future__ import annotations
+"""Métricas para evaluar una partición.
+
+Internas: silhouette, Davies-Bouldin, Calinski-Harabasz y correlación cofenética.
+Externa: ARI (compara dos particiones, la usamos para medir la estabilidad).
+Todas funcionan con X densa (np.ndarray) o dispersa (scipy.sparse).
+"""
 import numpy as np
 from scipy import sparse
 
 
-def silhouette_medio(D: np.ndarray, etiquetas: np.ndarray) -> float:
-    """Silhouette medio de una partición a partir de su matriz de distancias.
+# region Funciones auxiliares
 
-    Pre:  D es cuadrada (n, n) y etiquetas tiene n elementos.
-    Post: devuelve un valor en [-1, 1], o NaN si hay menos de dos clusters o uno por instancia.
-          Una instancia sola en su cluster puntúa 0.
+def normas(X) -> np.ndarray:
+    """Norma L2 de cada fila.
+
+    Pre:  X es una matriz (n, d) densa o dispersa.
+    Post: vector de n normas >= 0.
     """
-    D = np.asarray(D, dtype=float)
-    labels = np.asarray(etiquetas)
-    n = len(labels)
-
-    if D.shape != (n, n):
-        raise ValueError("D tiene que ser de tamaño (n, n) y encajar con las etiquetas.")
-
-    grupos = np.unique(labels)
-    if len(grupos) < 2 or len(grupos) >= n:
-        return float("nan")
-
-    valores = np.zeros(n, dtype=float)
-    for i in range(n):
-        mismo = labels == labels[i]
-        mismo[i] = False
-        if not np.any(mismo):
-            continue
-
-        a = float(D[i, mismo].mean())
-        b = min(float(D[i, labels == g].mean()) for g in grupos if g != labels[i])
-        denom = max(a, b)
-        valores[i] = 0.0 if denom == 0 else (b - a) / denom
-
-    return float(np.mean(valores))
-
-
-def correlacion_cofenetica(resultado) -> float:
-    """Correlación de Pearson entre las distancias originales y las alturas a las que el árbol une cada par.
-
-    Pre:  resultado es un ResultadoJerarquico ya ajustado.
-    Post: devuelve un valor en [-1, 1], o NaN si alguna de las dos series es constante.
-    """
-    D = resultado.distancias_originales
-    n = resultado.n_instancias
-    cofenetica = np.zeros((n, n), dtype=float)
-
-    miembros = {i: [i] for i in range(n)}
-    for idx, (izquierda, derecha, altura) in enumerate(resultado.merges):
-        mi, mj = miembros.pop(int(izquierda)), miembros.pop(int(derecha))
-        for a in mi:
-            for b in mj:
-                cofenetica[a, b] = cofenetica[b, a] = altura
-        miembros[n + idx] = mi + mj
-
-    tri = np.triu_indices(n, 1)
-    x, y = D[tri], cofenetica[tri]
-
-    if np.std(x) == 0 or np.std(y) == 0:
-        return float("nan")
-
-    return float(np.corrcoef(x, y)[0, 1])
-
-
-def davies_bouldin(X, etiquetas: np.ndarray) -> float:
-    """Índice de Davies-Bouldin con distancia euclídea entre centroides (menor es mejor).
-
-    Pre:  X tiene n filas (densa o dispersa) y etiquetas tiene n elementos.
-    Post: devuelve un valor >= 0, o NaN si hay menos de dos clusters o uno por instancia.
-    Una matriz dispersa se pasa a densa, así que conviene usarlo con conjuntos pequeños o medianos.
-    """
-    A = X.toarray() if sparse.issparse(X) else np.asarray(X, dtype=float)
-    labels = np.asarray(etiquetas)
-    grupos = np.unique(labels)
-
-    if len(grupos) < 2 or len(grupos) >= len(labels):
-        return float("nan")
-
-    centroides, dispersion = [], []
-    for g in grupos:
-        puntos = A[labels == g]
-        centro = puntos.mean(axis=0)
-        centroides.append(centro)
-        dispersion.append(float(np.linalg.norm(puntos - centro, axis=1).mean()))
-
-    centroides = np.asarray(centroides)
-    dispersion = np.asarray(dispersion)
-    dist = np.linalg.norm(centroides[:, None, :] - centroides[None, :, :], axis=2)
-    np.fill_diagonal(dist, np.inf)
-
-    razones = (dispersion[:, None] + dispersion[None, :]) / np.maximum(dist, 1e-12)
-    return float(np.mean(np.max(razones, axis=1)))
-
-
-def adjusted_rand_index(etiquetas_a: np.ndarray, etiquetas_b: np.ndarray) -> float:
-    """Índice de Rand ajustado (ARI) entre dos particiones de las mismas instancias.
-
-    Pre:  las dos etiquetas son vectores de la misma longitud.
-    Post: devuelve 1 si las particiones son iguales y un valor cercano a 0 si solo coinciden por azar.
-    """
-    a, b = np.asarray(etiquetas_a), np.asarray(etiquetas_b)
-    if a.ndim != 1 or b.ndim != 1 or len(a) != len(b):
-        raise ValueError("Las dos particiones tienen que ser vectores de la misma longitud.")
-    if len(a) < 2:
-        return 1.0
-
-    _, ai = np.unique(a, return_inverse=True)
-    _, bi = np.unique(b, return_inverse=True)
-
-    tabla = np.zeros((ai.max() + 1, bi.max() + 1), dtype=np.int64)
-    np.add.at(tabla, (ai, bi), 1)
-
-    def pares(x):
-        return x * (x - 1) / 2.0
-
-    suma_celdas = float(pares(tabla).sum())
-    suma_filas = float(pares(tabla.sum(axis=1)).sum())
-    suma_columnas = float(pares(tabla.sum(axis=0)).sum())
-    total = float(pares(len(a)))
-
-    esperado = suma_filas * suma_columnas / total
-    maximo = 0.5 * (suma_filas + suma_columnas)
-
-    denominador = maximo - esperado
-    if denominador == 0:
-        return 1.0
-
-    return float((suma_celdas - esperado) / denominador)
+    if sparse.issparse(X):
+        return np.sqrt(np.asarray(X.multiply(X).sum(axis=1)).ravel())
+    return np.linalg.norm(X, axis=1)
 
 
 def normalizar_filas(X):
-    """Escala cada fila a norma L2 igual a 1.
+    """Divide cada fila entre su norma para que quede con norma 1.
 
     Pre:  X es una matriz (n, d) densa o dispersa.
-    Post: devuelve una matriz del mismo tipo y forma; las filas nulas se quedan en cero.
+    Post: matriz del mismo tipo y forma. Las filas que eran todo ceros se quedan a cero.
     """
-    if sparse.issparse(X):
-        normas = np.sqrt(np.asarray(X.multiply(X).sum(axis=1)).ravel())
-        inversas = np.zeros_like(normas, dtype=float)
-        np.divide(1.0, normas, out=inversas, where=normas != 0)
-        return sparse.diags(inversas) @ X
-
-    X = np.asarray(X, dtype=float)
-    normas = np.linalg.norm(X, axis=1, keepdims=True)
-    return np.divide(X, normas, out=np.zeros_like(X), where=normas != 0)
+    n = normas(X)
+    inversas = np.divide(1.0, n, out=np.zeros_like(n), where=n > 0)  # evita dividir entre 0
+    return sparse.diags(inversas) @ X if sparse.issparse(X) else np.asarray(X) * inversas[:, None]
 
 
-def calinski_harabasz(X, etiquetas: np.ndarray) -> float:
-    """Índice de Calinski-Harabasz: (B / (k - 1)) / (W / (n - k)), con B y W las dispersiones entre y dentro de clusters.
+def producto(A, B) -> np.ndarray:
+    """Calcula A·Bᵀ y lo devuelve siempre como array denso.
+
+    Pre:  A es (n, d) y B es (m, d), densas o dispersas.
+    Post: array (n, m) de float.
+    """
+    P = A @ B.T
+    return np.asarray(P.toarray() if sparse.issparse(P) else P, dtype=float)
+
+
+def centroides(X, etiquetas):
+    """Centroide y tamaño de cada cluster.
+
+    Pre:  X tiene n filas y etiquetas tiene n elementos.
+    Post: (C, tam, inv): C es (k, d) con los centroides, tam los tamaños y inv el número
+          de cluster (0..k-1) de cada fila. Con X dispersa solo se pasan a denso los k centroides.
+    """
+    _, inv, tam = np.unique(etiquetas, return_inverse=True, return_counts=True)
+    # Matriz (k, n) con un 1 en (cluster, fila): al multiplicarla por X suma las filas de cada cluster
+    miembros = sparse.csr_matrix((np.ones(len(inv)), (inv, np.arange(len(inv)))))
+    sumas = miembros @ X
+    sumas = sumas.toarray() if sparse.issparse(sumas) else np.asarray(sumas)
+    return sumas / tam[:, None], tam, inv
+
+# endregion
+
+
+# region Índices internos
+
+def silhouette_medio(D: np.ndarray, etiquetas) -> float:
+    """Silhouette medio: s(i) = (b - a) / max(a, b).
+
+    a = distancia media de i a los de su cluster, b = distancia media al cluster vecino más cercano.
+
+    Pre:  D es la matriz (n, n) de distancias (diagonal a 0) y etiquetas tiene n elementos.
+    Post: valor en [-1, 1] (mayor es mejor), o NaN si no hay entre 2 y n-1 clusters.
+          Una instancia sola en su cluster cuenta como 0.
+    """
+    _, inv, tam = np.unique(etiquetas, return_inverse=True, return_counts=True)
+    n, k = len(inv), len(tam)
+    if not 2 <= k < n:
+        return float("nan")
+    filas = np.arange(n)
+    sumas = D @ np.eye(k)[inv]          # (n, k): suma de distancias de cada instancia a cada cluster
+    a = sumas[filas, inv] / np.maximum(tam[inv] - 1, 1)  # sin contarse a sí misma
+    medias = sumas / tam
+    medias[filas, inv] = np.inf         # para que el mínimo no sea su propio cluster
+    b = medias.min(axis=1)
+    s = np.divide(b - a, np.maximum(a, b), out=np.zeros(n), where=np.maximum(a, b) > 0)
+    s[tam[inv] == 1] = 0.0
+    return float(s.mean())
+
+
+def correlacion_cofenetica(resultado) -> float:
+    """Correlación de Pearson entre la distancia original de cada par y la altura a la que el árbol los une.
+
+    Mide lo bien que el dendrograma respeta las distancias de partida.
+
+    Pre:  resultado es un ResultadoJerarquico ya ajustado.
+    Post: valor en [-1, 1] (mayor es mejor), o NaN si alguna de las dos series es constante.
+    """
+    n = resultado.n_instancias
+    C = np.zeros((n, n))
+    miembros = {i: [i] for i in range(n)}
+    # Recorremos las fusiones: todos los pares que se juntan en una fusión tienen esa altura
+    for paso, (a, b, altura) in enumerate(resultado.merges):
+        ma, mb = miembros.pop(int(a)), miembros.pop(int(b))
+        C[np.ix_(ma, mb)] = C[np.ix_(mb, ma)] = altura
+        miembros[n + paso] = ma + mb
+    D = resultado.distancias_originales
+    if resultado.enlace == "ward" and resultado.distancia == "cosine":
+        D = np.sqrt(2 * D)              # Ward se construye con la euclídea de las filas normalizadas
+    tri = np.triu_indices(n, 1)         # cada par una sola vez
+    x, y = D[tri], C[tri]
+    if x.std() == 0 or y.std() == 0:
+        return float("nan")
+    return float(np.corrcoef(x, y)[0, 1])
+
+
+def davies_bouldin(X, etiquetas) -> float:
+    """Índice de Davies-Bouldin: media, para cada cluster, del peor (S_i + S_j) / d(c_i, c_j).
+
+    S_i es la distancia media de los puntos del cluster i a su centroide c_i (euclídea).
 
     Pre:  X tiene n filas (densa o dispersa) y etiquetas tiene n elementos.
-    Post: devuelve un valor >= 0 (mayor es mejor), o NaN si hay menos de dos clusters, uno por instancia o W = 0.
-    No densifica X: con matrices dispersas solo se construyen los k centroides.
+    Post: valor >= 0 (menor es mejor), o NaN si no hay entre 2 y n-1 clusters.
     """
-    labels = np.asarray(etiquetas)
-    n = len(labels)
-    grupos, inv = np.unique(labels, return_inverse=True)
-    k = len(grupos)
-    if k < 2 or k >= n:
+    C, tam, inv = centroides(X, etiquetas)
+    n, k = len(inv), len(tam)
+    if not 2 <= k < n:
         return float("nan")
+    cuadrados_c = (C ** 2).sum(axis=1)
+    # ||x - c||² = ||x||² - 2·x·c + ||c||², así no hace falta pasar X a densa
+    d2 = normas(X) ** 2 - 2 * producto(X, C)[np.arange(n), inv] + cuadrados_c[inv]
+    dispersion = np.bincount(inv, weights=np.sqrt(np.maximum(d2, 0))) / tam  # S_i
+    entre = np.sqrt(np.maximum(cuadrados_c[:, None] + cuadrados_c[None, :] - 2 * C @ C.T, 0))
+    np.fill_diagonal(entre, np.inf)     # un cluster no se compara consigo mismo
+    razones = (dispersion[:, None] + dispersion[None, :]) / np.maximum(entre, 1e-12)
+    return float(razones.max(axis=1).mean())
 
-    es_sparse = sparse.issparse(X)
-    A = X.tocsr().astype(np.float64) if es_sparse else np.asarray(X, dtype=float)
-    if A.shape[0] != n:
-        raise ValueError("X y las etiquetas tienen que tener el mismo número de filas.")
 
-    miembros = sparse.csr_matrix((np.ones(n), (inv, np.arange(n))), shape=(k, n))
-    sumas = miembros @ A
-    sumas = sumas.toarray() if es_sparse else np.asarray(sumas)
+def calinski_harabasz(X, etiquetas) -> float:
+    """Índice de Calinski-Harabasz: (B / (k - 1)) / (W / (n - k)).
 
-    tam = np.bincount(inv).astype(float)
-    centroides = sumas / tam[:, None]
-    media = np.asarray(A.sum(axis=0)).ravel() / n
+    B es la dispersión entre clusters y W la dispersión dentro de los clusters.
 
-    entre = float((tam * ((centroides - media) ** 2).sum(axis=1)).sum())
-    total = float(A.multiply(A).sum()) if es_sparse else float((A * A).sum())
-    dentro = max(total - float((tam * (centroides ** 2).sum(axis=1)).sum()), 0.0)
-
+    Pre:  X tiene n filas (densa o dispersa) y etiquetas tiene n elementos.
+    Post: valor >= 0 (mayor es mejor), o NaN si no hay entre 2 y n-1 clusters o W = 0.
+    """
+    C, tam, inv = centroides(X, etiquetas)
+    n, k = len(inv), len(tam)
+    if not 2 <= k < n:
+        return float("nan")
+    media = tam @ C / n                 # centroide global
+    entre = float((tam * ((C - media) ** 2).sum(axis=1)).sum())
+    # W = suma de ||x||² - suma de tam·||c||² (misma idea que en Davies-Bouldin)
+    dentro = float((normas(X) ** 2).sum() - (tam * (C ** 2).sum(axis=1)).sum())
     if dentro <= 1e-12:
         return float("nan")
-    return float((entre / (k - 1)) / (dentro / (n - k)))
+    return (entre / (k - 1)) / (dentro / (n - k))
+
+# endregion
+
+
+# region Índice externo
+
+def adjusted_rand_index(etiquetas_a, etiquetas_b) -> float:
+    """Índice de Rand ajustado (ARI) entre dos particiones de las mismas instancias.
+
+    Pre:  las dos particiones tienen la misma longitud.
+    Post: 1 si son iguales, alrededor de 0 si solo coinciden por azar (puede ser negativo).
+    """
+    _, a = np.unique(etiquetas_a, return_inverse=True)
+    _, b = np.unique(etiquetas_b, return_inverse=True)
+    if len(a) != len(b):
+        raise ValueError("Las dos particiones tienen que tener la misma longitud.")
+    if len(a) < 2:
+        return 1.0
+    # Tabla de contingencia: cuántas instancias hay en el cluster i de A y en el j de B
+    tabla = np.zeros((a.max() + 1, b.max() + 1))
+    np.add.at(tabla, (a, b), 1)
+    pares = lambda x: float((x * (x - 1) / 2).sum())   # suma de "x sobre 2"
+    celdas, filas, columnas = pares(tabla), pares(tabla.sum(axis=1)), pares(tabla.sum(axis=0))
+    esperado = filas * columnas / (len(a) * (len(a) - 1) / 2)
+    maximo = (filas + columnas) / 2
+    return 1.0 if maximo == esperado else (celdas - esperado) / (maximo - esperado)
+
+# endregion
+
+
+def evaluar_corte(resultado, X, k: int) -> dict:
+    """Corta el árbol en k clusters y calcula sus métricas.
+
+    Pre:  resultado es el árbol ajustado con X y 2 <= k < n.
+    Post: diccionario con k, silhouette, davies_bouldin, calinski_harabasz, tam_min, tam_max
+          y corte_ambiguo.
+    """
+    etiquetas = resultado.etiquetas(k)
+    tam = np.bincount(etiquetas)
+    return {
+        "k": k,
+        "silhouette": silhouette_medio(resultado.distancias_originales, etiquetas),
+        "davies_bouldin": davies_bouldin(X, etiquetas),
+        "calinski_harabasz": calinski_harabasz(X, etiquetas),
+        "tam_min": int(tam.min()),
+        "tam_max": int(tam.max()),
+        "corte_ambiguo": resultado.corte_ambiguo(k),
+    }

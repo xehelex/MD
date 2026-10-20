@@ -1,30 +1,18 @@
 {
-  "entrada": "resultados_tfidf_completo",
+  "entrada": "resultados_tfidf_caracteres4_completo_svd100",
   "salida": "resultados_clustering_completo",
-  "distancia": "cosine",
-  "enlaces": [
-    "single",
-    "complete",
-    "average",
-    "ward"
-  ],
+  "distancias": ["cosine"],
+  "enlaces": ["single", "complete", "average", "ward"],
+  "p": 2,
   "k_min": 2,
   "k_max": 20,
-  "calcular_estabilidad": false,
-  "repeticiones_estabilidad": 5,
+  "criterios": ["silhouette", "davies_bouldin", "calinski_harabasz"],
+  "busqueda": "mallado",
+  "puntos_malla": 12,
+  "comprobar": false,
+  "repeticiones_estabilidad": 0,
   "semilla": 42,
-  "generar_graficas": true,
-  "incluir_db": true,
-  "experimentos": {
-    "busqueda": "mallado",
-    "puntos_malla": 12,
-    "comprobar": false,
-    "criterios": [
-      "silhouette",
-      "davies_bouldin",
-      "calinski_harabasz"
-    ]
-  },
+  "graficas": true,
   "mejor_modelo": {
     "enlace": "ward",
     "distancia": "cosine",

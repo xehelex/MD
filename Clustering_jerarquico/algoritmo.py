@@ -1,445 +1,256 @@
-"""Clustering jerárquico aglomerativo propio y el modelo final que se guarda en modelo.pkl."""
-from __future__ import annotations
+"""Clustering jerárquico aglomerativo (implementación propia) y el modelo final que se guarda en modelo.pkl.
 
+Flujo: distancias() -> ClusteringJerarquico.fit() -> ResultadoJerarquico (árbol) -> etiquetas(k) (corte)
+       entrenar_modelo() junta todo eso y devuelve un ModeloEntrenado que sabe predecir filas nuevas.
+"""
 from dataclasses import dataclass, field
 from datetime import datetime
-import heapq
-import itertools
-import pickle
 from pathlib import Path
+import pickle
 import numpy as np
 from scipy import sparse
-from .metricas import (silhouette_medio, correlacion_cofenetica, davies_bouldin,
-                       calinski_harabasz, normalizar_filas)
+from .metricas import normas, normalizar_filas, producto, centroides, evaluar_corte, correlacion_cofenetica
 
-# Distancias admitidas para el modelo final (modelo.pkl).
-DISTANCIAS_MODELO = ("cosine", "euclidean")
+ENLACES = ("single", "complete", "average", "ward")
+DISTANCIAS = ("cosine", "euclidean", "manhattan", "chebyshev", "minkowski")
+
+
+def distancias(A, B, tipo: str = "cosine", p: float = 2.0) -> np.ndarray:
+    """Distancia entre cada fila de A y cada fila de B.
+
+    Pre:  A es (n, d) y B es (m, d), densas o dispersas; tipo está en DISTANCIAS; p >= 1 (solo minkowski).
+    Post: array (n, m) con las distancias (coseno en [0, 2], el resto >= 0).
+    """
+    if tipo == "minkowski" and p == 2:
+        tipo = "euclidean"
+
+    # Coseno y euclídea salen del producto escalar, que funciona igual con matrices dispersas
+    if tipo in ("cosine", "euclidean"):
+        P, na, nb = producto(A, B), normas(A), normas(B)
+        if tipo == "euclidean":
+            # ||a - b||² = ||a||² + ||b||² - 2·a·b  (el maximum quita negativos por redondeo)
+            return np.sqrt(np.maximum(na[:, None] ** 2 + nb[None, :] ** 2 - 2 * P, 0.0))
+        denom = np.outer(na, nb)
+        D = 1.0 - np.divide(P, denom, out=np.zeros_like(P), where=denom > 0)
+        D[np.ix_(na == 0, nb == 0)] = 0.0      # dos vectores nulos los consideramos iguales
+        return np.clip(D, 0.0, 2.0)
+
+    # Manhattan (p = 1), Chebyshev (p = inf) y Minkowski: hay que pasar a densa e ir fila a fila, O(n·m·d)
+    p = {"manhattan": 1.0, "chebyshev": np.inf}.get(tipo, p)
+    A = A.toarray() if sparse.issparse(A) else np.asarray(A, dtype=float)
+    B = B.toarray() if sparse.issparse(B) else np.asarray(B, dtype=float)
+    D = np.empty((len(A), len(B)))
+    for i, fila in enumerate(A):
+        dif = np.abs(B - fila)
+        D[i] = dif.max(axis=1) if np.isinf(p) else (dif ** p).sum(axis=1) ** (1 / p)
+    return D
 
 
 @dataclass
 class ResultadoJerarquico:
-    """Árbol de fusiones: cada fila de `merges` es (id_izquierda, id_derecha, altura).
+    """Árbol de fusiones que devuelve fit().
 
-    Las hojas son los ids 0..n-1 y la fusión número i crea el nodo n+i.
+    Cada fila de `merges` es (id_a, id_b, altura). Las hojas son los ids 0..n-1 y la fusión
+    número i crea el nodo n+i (mismo formato que usa scipy, para poder comparar).
     """
     merges: np.ndarray
     n_instancias: int
     enlace: str
     distancia: str
-    distancias_originales: np.ndarray
+    distancias_originales: np.ndarray       # matriz (n, n), se usa para el silhouette y la cofenética
 
     def etiquetas(self, k: int) -> np.ndarray:
         """Corta el árbol en k clusters.
 
         Pre:  1 <= k <= n_instancias.
-        Post: vector de n enteros con exactamente k valores distintos.
+        Post: vector de n enteros con k valores distintos (0..k-1).
         """
         n = self.n_instancias
         if not 1 <= k <= n:
             raise ValueError(f"k tiene que estar entre 1 y {n}.")
-
-        grupos = {i: {i} for i in range(n)}
-        siguiente_id = n
-
-        for izquierda, derecha, _altura in self.merges[:n - k]:
-            izquierda, derecha = int(izquierda), int(derecha)
-            grupos[siguiente_id] = grupos.pop(izquierda) | grupos.pop(derecha)
-            siguiente_id += 1
-
+        # Para quedarnos con k clusters basta con aplicar las n-k primeras fusiones
+        grupos = {i: [i] for i in range(n)}
+        for paso, (a, b, _) in enumerate(self.merges[:n - k]):
+            grupos[n + paso] = grupos.pop(int(a)) + grupos.pop(int(b))
         etiquetas = np.empty(n, dtype=int)
         for etiqueta, miembros in enumerate(grupos.values()):
-            for miembro in miembros:
-                etiquetas[miembro] = etiqueta
+            etiquetas[miembros] = etiqueta
         return etiquetas
 
-    def asignar_nuevo(self, distancia_nuevo: np.ndarray, k: int) -> int:
-        """Asigna un elemento nuevo al cluster con menor distancia media (aproximación, el árbol no cambia).
+    def corte_ambiguo(self, k: int) -> bool:
+        """Dice si el corte en k depende del desempate.
 
-        Pre:  distancia_nuevo tiene una distancia finita a cada instancia de entrenamiento.
-        Post: etiqueta de uno de los k clusters.
+        Pre:  k es un entero.
+        Post: True si las fusiones justo antes y justo después del corte tienen la misma altura
+              (pasa mucho con complete sobre TF-IDF, donde muchas distancias valen exactamente 1).
         """
-        d = np.asarray(distancia_nuevo, dtype=float)
-        if d.shape != (self.n_instancias,):
-            raise ValueError("distancia_nuevo debe tener una distancia por cada instancia.")
-        if not np.all(np.isfinite(d)):
-            raise ValueError("Las distancias tienen que ser valores finitos.")
-
-        labels = self.etiquetas(k)
-        candidatos = np.unique(labels)
-        medias = [float(d[labels == c].mean()) for c in candidatos]
-        return int(candidatos[int(np.argmin(medias))])
+        h, n = self.merges[:, 2], self.n_instancias
+        return bool(2 <= k < n and abs(h[n - k - 1] - h[n - k]) <= 1e-12)
 
 
 class ClusteringJerarquico:
     """Clustering aglomerativo con enlaces single, complete, average y ward.
 
-    Construye la matriz de distancias completa, así que la memoria crece como O(n²).
-    Manhattan, Chebyshev y Minkowski con p != 2 convierten X a densa y cuestan O(n²·d).
+    Coste: memoria O(n²) por la matriz de distancias y tiempo O(n³) (n-1 pasos que buscan
+    el mínimo en una matriz n x n). Con nuestros ~600 usuarios tarda menos de medio segundo.
     """
-    ENLACES = {"single", "complete", "average", "ward"}
-    DISTANCIAS = {"cosine", "euclidean", "manhattan", "chebyshev", "minkowski"}
 
     def __init__(self, enlace: str = "average", distancia: str = "cosine", p: float = 2.0):
-        """Pre:  enlace y distancia pertenecen a ENLACES y DISTANCIAS; p >= 1 si la distancia es minkowski.
-
-        Lanza ValueError si no se cumple. Ward solo admite distancia euclídea (minkowski con p = 2 incluida).
+        """Pre:  enlace en ENLACES, distancia en DISTANCIAS y p >= 1 si la distancia es minkowski.
+                 Ward solo con euclídea (o minkowski p = 2) o coseno.
+        Post: objeto listo para fit(). Si no se cumple la precondición lanza ValueError.
         """
-        if enlace not in self.ENLACES:
-            raise ValueError(f"Enlace '{enlace}' no válido. Usa: {sorted(self.ENLACES)}")
-        if distancia not in self.DISTANCIAS:
-            raise ValueError(f"Distancia '{distancia}' no válida. Usa: {sorted(self.DISTANCIAS)}")
-        if distancia == "minkowski" and not (p >= 1):
-            raise ValueError("El p de Minkowski tiene que ser >= 1 (admite np.inf).")
-
-        if enlace == "ward":
-            euclidea = distancia == "euclidean" or (distancia == "minkowski" and p == 2)
-            if not euclidea:
-                raise ValueError("Ward solo tiene sentido con distancia euclídea (minkowski p=2).")
-
-        self.enlace = enlace
-        self.distancia = distancia
-        self.p = float(p)
-        self.resultado_: ResultadoJerarquico | None = None
-
-    @staticmethod
-    def _minkowski(A: np.ndarray, p: float) -> np.ndarray:
-        """Distancias de Minkowski calculadas por bloques de filas (unos 256 MB por bloque)."""
-        n, d = A.shape
-        bloque = max(1, int(256e6 // max(n * d * 8, 1)))
-        D = np.zeros((n, n), dtype=float)
-
-        for ini in range(0, n, bloque):
-            fin = min(ini + bloque, n)
-            dif = np.abs(A[ini:fin, None, :] - A[None, :, :])
-            if np.isinf(p):
-                D[ini:fin] = dif.max(axis=2)
-            elif p == 1:
-                D[ini:fin] = dif.sum(axis=2)
-            else:
-                D[ini:fin] = (dif ** p).sum(axis=2) ** (1.0 / p)
-
-        return D
-
-    @staticmethod
-    def _distancias(X, tipo: str, p: float = 2.0) -> np.ndarray:
-        """Matriz de distancias (n, n) de las filas de X, que puede ser densa o dispersa."""
-        if X.ndim != 2:
-            raise ValueError("X tiene que ser una matriz de 2 dimensiones.")
-        n = X.shape[0]
-        if n < 2:
-            raise ValueError("Hacen falta al menos 2 instancias.")
-
-        exponentes = {"manhattan": 1.0, "chebyshev": np.inf, "minkowski": p}
-        if tipo in exponentes and not (tipo == "minkowski" and p == 2):
-            A = X.toarray() if sparse.issparse(X) else np.asarray(X, dtype=float)
-            if not np.all(np.isfinite(A)):
-                raise ValueError("X tiene valores NaN o infinitos.")
-            D = ClusteringJerarquico._minkowski(A, exponentes[tipo])
-            np.fill_diagonal(D, 0.0)
-            return D
-
-        if sparse.issparse(X):
-            X = X.astype(np.float64, copy=False)
-            normas = np.sqrt(np.asarray(X.multiply(X).sum(axis=1)).ravel())
-            producto = (X @ X.T).toarray()
-            if tipo == "cosine":
-                denom = np.outer(normas, normas)
-                similitud = np.divide(producto, denom, out=np.zeros_like(producto), where=denom > 0)
-                D = np.clip(1.0 - similitud, 0.0, 2.0)
-                ceros = normas == 0
-                D[np.ix_(ceros, ceros)] = 0.0
-            else:
-                norma2 = normas ** 2
-                D = np.sqrt(np.maximum(norma2[:, None] + norma2[None, :] - 2 * producto, 0.0))
-        else:
-            A = np.asarray(X, dtype=float)
-            if not np.all(np.isfinite(A)):
-                raise ValueError("X tiene valores NaN o infinitos.")
-            if tipo == "cosine":
-                normas = np.linalg.norm(A, axis=1)
-                producto = A @ A.T
-                denom = np.outer(normas, normas)
-                similitud = np.divide(producto, denom, out=np.zeros_like(producto), where=denom > 0)
-                D = np.clip(1.0 - similitud, 0.0, 2.0)
-                ceros = normas == 0
-                D[np.ix_(ceros, ceros)] = 0.0
-            else:
-                norma2 = np.sum(A * A, axis=1)
-                D = np.sqrt(np.maximum(norma2[:, None] + norma2[None, :] - 2 * (A @ A.T), 0.0))
-
-        np.fill_diagonal(D, 0.0)
-        return D
+        if enlace not in ENLACES:
+            raise ValueError(f"Enlace '{enlace}' no válido. Usa: {ENLACES}")
+        if distancia not in DISTANCIAS:
+            raise ValueError(f"Distancia '{distancia}' no válida. Usa: {DISTANCIAS}")
+        if distancia == "minkowski" and p < 1:
+            raise ValueError("El p de Minkowski tiene que ser >= 1.")
+        if enlace == "ward" and distancia not in ("euclidean", "cosine") and not (distancia == "minkowski" and p == 2):
+            raise ValueError("Ward solo admite distancia euclídea o coseno.")
+        self.enlace, self.distancia, self.p = enlace, distancia, float(p)
 
     def fit(self, X) -> ResultadoJerarquico:
         """Construye el árbol de fusiones.
 
-        Pre:  X tiene n >= 2 filas, es finita y puede ser densa o dispersa.
-        Post: devuelve (y guarda en `resultado_`) un ResultadoJerarquico con n-1 fusiones,
-              en el orden en que se producen (altura no decreciente con estos cuatro enlaces).
+        Pre:  X es una matriz (n, d) densa o dispersa con n >= 2 y valores finitos.
+        Post: ResultadoJerarquico con las n-1 fusiones en el orden en que ocurren.
         """
-        D0 = self._distancias(X, self.distancia, self.p)
-        n = D0.shape[0]
+        # 1. Matriz de distancias inicial
+        X = X.astype(np.float64)                # nuestras matrices vienen en float32 y se pierde precisión
+        D0 = np.triu(distancias(X, X, self.distancia, self.p), 1)
+        D0 = D0 + D0.T                          # simétrica del todo y con la diagonal a 0
+        n = len(D0)
+        if n < 2:
+            raise ValueError("Hacen falta al menos 2 instancias.")
 
-        # Ward se actualiza sobre distancias al cuadrado; D0 se conserva para las métricas.
-        es_ward = self.enlace == "ward"
-        D_trabajo = D0 ** 2 if es_ward else D0
-
-        dist = {}
-        for i in range(n):
-            for j in range(i + 1, n):
-                dist[(i, j)] = float(D_trabajo[i, j])
-
-        sizes = {i: 1 for i in range(n)}
-        active = set(range(n))
-        heap = []
-        counter = itertools.count()
-
-        for (i, j), d in dist.items():
-            heapq.heappush(heap, (d, next(counter), i, j))
-
+        # 2. Matriz de trabajo. Ward va con distancias euclídeas al cuadrado.
+        #    Con coseno usamos que en vectores de norma 1: d_euclídea² = 2 · d_coseno
+        ward = self.enlace == "ward"
+        if ward:
+            D = 2 * D0 if self.distancia == "cosine" else D0 ** 2
+        else:
+            D = D0.copy()
+        np.fill_diagonal(D, np.inf)             # que nadie se fusione consigo mismo
+        tam = np.ones(n)                        # tamaño del cluster de cada fila
+        nodo = np.arange(n)                     # id del cluster que ocupa cada fila de D
         merges = []
-        next_id = n
 
-        for _ in range(n - 1):
-            # La cola acumula entradas obsoletas: se descartan al sacarlas si algún cluster
-            # ya no está activo o si la distancia guardada ha cambiado.
-            while heap:
-                d, _seq, i, j = heapq.heappop(heap)
-                if i in active and j in active and (min(i, j), max(i, j)) in dist:
-                    actual = dist[(min(i, j), max(i, j))]
-                    if abs(actual - d) <= 1e-12:
-                        break
-            else:
-                raise RuntimeError("No se ha podido encontrar una fusión válida.")
+        # 3. n-1 fusiones: en cada paso se juntan los dos clusters más cercanos
+        for paso in range(n - 1):
+            i, j = sorted(np.unravel_index(np.argmin(D), D.shape))
+            altura = D[i, j]
+            merges.append((nodo[i], nodo[j], altura))
 
-            merges.append((i, j, d))
-            nuevos = next_id
-            next_id += 1
-            otros = list(active - {i, j})
-            size_i, size_j = sizes[i], sizes[j]
+            # Distancia del cluster nuevo (i ∪ j) a todos los demás (fórmulas de Lance-Williams)
+            if self.enlace == "single":
+                nuevo = np.minimum(D[i], D[j])
+            elif self.enlace == "complete":
+                nuevo = np.maximum(D[i], D[j])
+            elif self.enlace == "average":
+                nuevo = (tam[i] * D[i] + tam[j] * D[j]) / (tam[i] + tam[j])
+            else:  # ward
+                nuevo = ((tam[i] + tam) * D[i] + (tam[j] + tam) * D[j] - tam * altura) / (tam[i] + tam[j] + tam)
 
-            # Fórmulas de Lance-Williams para la distancia del cluster nuevo al resto.
-            for z in otros:
-                diz = dist.pop((min(i, z), max(i, z)))
-                djz = dist.pop((min(j, z), max(j, z)))
+            # El cluster nuevo se queda en la fila i y la fila j se "apaga" poniéndola a infinito
+            D[i, :] = D[:, i] = nuevo
+            D[j, :] = D[:, j] = np.inf
+            D[i, i] = np.inf
+            tam[i] += tam[j]
+            nodo[i] = n + paso
 
-                if self.enlace == "single":
-                    dnz = min(diz, djz)
-                elif self.enlace == "complete":
-                    dnz = max(diz, djz)
-                elif self.enlace == "ward":
-                    size_z = sizes[z]
-                    dnz = ((size_i + size_z) * diz + (size_j + size_z) * djz
-                           - size_z * d) / (size_i + size_j + size_z)
-                else:
-                    dnz = (size_i * diz + size_j * djz) / (size_i + size_j)
-
-                key = (min(nuevos, z), max(nuevos, z))
-                dist[key] = float(dnz)
-                heapq.heappush(heap, (float(dnz), next(counter), key[0], key[1]))
-
-            dist.pop((min(i, j), max(i, j)))
-            active.remove(i)
-            active.remove(j)
-            active.add(nuevos)
-            sizes[nuevos] = size_i + size_j
-
-        merges = np.asarray(merges, dtype=float)
-        if es_ward and len(merges):
-            # Las alturas de Ward vuelven a unidades de distancia (raíz de la altura cuadrática).
-            merges[:, 2] = np.sqrt(np.maximum(merges[:, 2], 0.0))
-
-        self.resultado_ = ResultadoJerarquico(
-            merges=merges,
-            n_instancias=n,
-            enlace=self.enlace,
-            distancia=self.distancia,
-            distancias_originales=D0,
-        )
-        return self.resultado_
+        merges = np.array(merges, dtype=float)
+        if ward:
+            merges[:, 2] = np.sqrt(merges[:, 2])  # volvemos a unidades de distancia
+        return ResultadoJerarquico(merges, n, self.enlace, self.distancia, D0)
 
     def fit_predict(self, X, k: int) -> np.ndarray:
-        """Ajusta el modelo y devuelve las etiquetas de un corte en k clusters (Pre/Post como `fit` y `etiquetas`)."""
+        """Pre: como fit() y 1 <= k <= n.  Post: etiquetas del corte en k clusters."""
         return self.fit(X).etiquetas(k)
-
-
-def preparar_modelo(enlace: str, distancia: str, X, p: float = 2.0):
-    """Crea el clustering y devuelve (modelo, matriz con la que hay que ajustarlo).
-
-    Ward solo admite distancia euclídea. Si se pide coseno con Ward, se normalizan las filas a norma 1
-    y se usa la euclídea: sobre vectores unitarios d_eucl² = 2·d_coseno, así que Ward sigue
-    trabajando en el espacio coseno. Con el resto de combinaciones X no se modifica.
-
-    Lanza ValueError si la combinación enlace-distancia no es válida.
-    """
-    if enlace == "ward" and distancia == "cosine":
-        return ClusteringJerarquico(enlace=enlace, distancia="euclidean"), normalizar_filas(X)
-    return ClusteringJerarquico(enlace=enlace, distancia=distancia, p=p), X
-
-
-def matriz_de_evaluacion(resultado: ResultadoJerarquico, X_modelo, distancia_pedida: str) -> np.ndarray:
-    """Matriz de distancias con la que se mide el silhouette.
-
-    Si Ward se ajustó con euclídea sobre filas normalizadas pero se pidió coseno, la partición se
-    evalúa igualmente con coseno para que su silhouette sea comparable con el de los demás enlaces.
-    """
-    if resultado.distancia == distancia_pedida:
-        return resultado.distancias_originales
-    return ClusteringJerarquico._distancias(X_modelo, distancia_pedida)
-
-
-def _normas(X) -> np.ndarray:
-    if sparse.issparse(X):
-        return np.sqrt(np.asarray(X.multiply(X).sum(axis=1)).ravel())
-    return np.linalg.norm(np.asarray(X, dtype=float), axis=1)
-
-
-def _producto(A, B) -> np.ndarray:
-    """A @ B.T como array denso, sea cual sea el formato de cada matriz."""
-    P = A @ B.T
-    return P.toarray() if sparse.issparse(P) else np.asarray(P)
-
-
-def _distancias_cruzadas(A, B, tipo: str) -> np.ndarray:
-    """Distancias entre las filas de A y las de B (coseno o euclídea), con el mismo criterio que fit()."""
-    producto = _producto(A, B)
-    na, nb = _normas(A), _normas(B)
-    if tipo == "cosine":
-        denom = np.outer(na, nb)
-        similitud = np.divide(producto, denom, out=np.zeros_like(producto), where=denom > 0)
-        D = np.clip(1.0 - similitud, 0.0, 2.0)
-        D[np.ix_(na == 0, nb == 0)] = 0.0
-        return D
-    return np.sqrt(np.maximum(na[:, None] ** 2 + nb[None, :] ** 2 - 2 * producto, 0.0))
 
 
 @dataclass
 class ModeloEntrenado:
-    """Modelo final que se guarda en modelo.pkl: árbol, datos de entrenamiento y regla para filas nuevas.
+    """Modelo final que se guarda en modelo.pkl.
 
-    Para cargarlo hace falta que el paquete Clustering_jerarquico sea importable, porque pickle
-    guarda la clase por su nombre. Solo deben cargarse archivos .pkl de confianza.
+    Guarda el árbol, la matriz de entrenamiento, las etiquetas y los centroides para poder asignar
+    usuarios nuevos. Para cargarlo el paquete Clustering_jerarquico tiene que poder importarse
+    (pickle guarda la clase por su nombre) y solo hay que abrir .pkl de confianza.
     """
     enlace: str
-    distancia: str              # la pedida en la configuración
-    distancia_efectiva: str     # la usada para construir el árbol (Ward con coseno => euclidean)
+    distancia: str
     k: int
     resultado: ResultadoJerarquico
-    X_entrenamiento: object     # matriz con la que se ajustó (normalizada si Ward con coseno)
+    X: object                  # matriz de entrenamiento (normalizada por filas si la distancia es coseno)
     etiquetas: np.ndarray
-    centroides: np.ndarray      # k x atributos, en el espacio de X_entrenamiento
+    centroides: np.ndarray
     tamanos: np.ndarray
     metricas: dict
     creado: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
 
-    def _preparar(self, X_nuevo):
-        if sparse.issparse(self.X_entrenamiento):
-            X = sparse.csr_matrix(X_nuevo, dtype=np.float64)
-            finitos = np.all(np.isfinite(X.data))
-        else:
-            if sparse.issparse(X_nuevo):
-                X_nuevo = X_nuevo.toarray()
-            X = np.atleast_2d(np.asarray(X_nuevo, dtype=float))
-            finitos = np.all(np.isfinite(X))
-        if X.ndim != 2 or X.shape[1] != self.X_entrenamiento.shape[1]:
-            raise ValueError(f"Las filas nuevas deben tener {self.X_entrenamiento.shape[1]} atributos "
-                             f"(los mismos que el entrenamiento); llegan {X.shape[-1]}.")
-        if not finitos:
-            raise ValueError("X_nuevo tiene valores NaN o infinitos.")
-        if self.distancia != self.distancia_efectiva:     # el modelo se entrenó con filas normalizadas
-            X = normalizar_filas(X)
-        return X
-
     def predecir(self, X_nuevo) -> np.ndarray:
         """Asigna un cluster a cada fila nueva.
 
-        El clustering jerárquico no predice de forma nativa, así que cada fila se asigna al cluster
-        al que menos le costaría unirse, según el enlace del modelo: single = distancia mínima,
-        complete = máxima, average = media y ward = aumento de la suma de cuadrados,
-        n_c/(n_c+1)·||x - centroide_c||². Es una aproximación: el árbol no cambia al añadir filas.
+        El jerárquico no predice de por sí, así que cada fila va al cluster al que menos le costaría
+        unirse según el enlace: single = distancia mínima, complete = máxima, average = media y
+        ward = lo que aumenta la suma de cuadrados, n_c/(n_c+1)·||x - centroide_c||².
+        Es una aproximación: el árbol no se recalcula.
 
-        Pre:  X_nuevo tiene los mismos atributos que el entrenamiento y valores finitos.
-        Post: vector de enteros en 0..k-1, con las mismas etiquetas que `etiquetas`.
+        Pre:  X_nuevo (una fila o una matriz) tiene los mismos atributos que el entrenamiento.
+        Post: vector con un cluster (0..k-1) por fila.
         """
-        X = self._preparar(X_nuevo)
+        if not sparse.issparse(X_nuevo):
+            X_nuevo = np.atleast_2d(np.asarray(X_nuevo, dtype=float))  # admite también una sola fila
+        if X_nuevo.shape[1] != self.X.shape[1]:
+            raise ValueError(f"Las filas nuevas tienen que tener {self.X.shape[1]} atributos.")
+        if self.distancia == "cosine":
+            X_nuevo = normalizar_filas(X_nuevo)   # igual que se hizo con el entrenamiento
         if self.enlace == "ward":
-            cuadrados = (_normas(X) ** 2)[:, None] - 2 * _producto(X, self.centroides) \
-                + (self.centroides ** 2).sum(axis=1)[None, :]
-            coste = np.maximum(cuadrados, 0.0) * (self.tamanos / (self.tamanos + 1.0))[None, :]
+            coste = distancias(X_nuevo, self.centroides, "euclidean") ** 2 * self.tamanos / (self.tamanos + 1)
         else:
-            D = _distancias_cruzadas(X, self.X_entrenamiento, self.distancia_efectiva)
+            D = distancias(X_nuevo, self.X, self.distancia)
             agregar = {"single": np.min, "complete": np.max, "average": np.mean}[self.enlace]
             coste = np.column_stack([agregar(D[:, self.etiquetas == c], axis=1) for c in range(self.k)])
         return np.argmin(coste, axis=1)
 
     def resumen(self) -> str:
+        """Post: texto con la configuración, los tamaños de cluster y las métricas del modelo."""
         m = self.metricas
-        fmt = lambda v, d=4: "no calculado" if v is None else f"{v:.{d}f}"
-        extra = (f" (calculada como {self.distancia_efectiva} sobre filas normalizadas)"
-                 if self.distancia != self.distancia_efectiva else "")
-        return "\n".join([
-            f"Enlace: {self.enlace} | distancia: {self.distancia}{extra}",
-            f"Instancias: {self.resultado.n_instancias} | atributos: {self.X_entrenamiento.shape[1]} | k = {self.k}",
-            f"Tamaños de cluster: {self.tamanos.astype(int).tolist()}",
-            f"Silhouette: {fmt(m['silhouette'])} | Davies-Bouldin: {fmt(m['davies_bouldin'])} | "
-            f"Calinski-Harabasz: {fmt(m['calinski_harabasz'], 2)} | Cofenética: {fmt(m['correlacion_cofenetica'])}",
-        ])
+        return (f"Enlace: {self.enlace} | distancia: {self.distancia} | k = {self.k}\n"
+                f"Instancias: {self.X.shape[0]} | atributos: {self.X.shape[1]}\n"
+                f"Tamaños de cluster: {self.tamanos.tolist()}\n"
+                f"Silhouette: {m['silhouette']:.4f} | Davies-Bouldin: {m['davies_bouldin']:.4f} | "
+                f"Calinski-Harabasz: {m['calinski_harabasz']:.2f} | Cofenética: {m['cofenetica']:.4f}")
 
     def guardar(self, ruta) -> Path:
-        """Guarda el modelo en `ruta` (crea las carpetas que falten) y devuelve la ruta."""
+        """Pre: ruta es la ruta del .pkl.  Post: modelo guardado (crea las carpetas que falten); devuelve la ruta."""
         ruta = Path(ruta)
         ruta.parent.mkdir(parents=True, exist_ok=True)
-        with ruta.open("wb") as archivo:
-            pickle.dump(self, archivo, protocol=pickle.HIGHEST_PROTOCOL)
+        with ruta.open("wb") as f:
+            pickle.dump(self, f)
         return ruta
 
     @staticmethod
     def cargar(ruta) -> "ModeloEntrenado":
-        """Lee un modelo guardado con `guardar`. Lanza TypeError si el archivo no contiene un ModeloEntrenado."""
-        with Path(ruta).open("rb") as archivo:
-            modelo = pickle.load(archivo)
-        if not isinstance(modelo, ModeloEntrenado):
-            raise TypeError(f"{ruta} no contiene un ModeloEntrenado.")
-        return modelo
+        """Pre: ruta apunta a un .pkl creado con guardar().  Post: el ModeloEntrenado guardado."""
+        with Path(ruta).open("rb") as f:
+            return pickle.load(f)
 
 
 def entrenar_modelo(X, enlace: str, distancia: str, k: int) -> ModeloEntrenado:
-    """Ajusta el clustering con la configuración elegida, corta en k clusters y lo empaqueta.
+    """Entrena el modelo final con la configuración elegida.
 
-    Pre:  distancia es 'cosine' o 'euclidean', X tiene n filas y 2 <= k < n.
-    Post: ModeloEntrenado listo para `guardar` y `predecir`. Lanza ValueError si no se cumple la precondición.
+    Pre:  X es (n, d) densa o dispersa, distancia es 'cosine' o 'euclidean' y 2 <= k < n.
+    Post: ModeloEntrenado con el árbol cortado en k clusters, sus centroides y sus métricas.
     """
-    if distancia not in DISTANCIAS_MODELO:
-        raise ValueError(f"Para el modelo final la distancia tiene que ser una de {list(DISTANCIAS_MODELO)}.")
-
-    modelo, X_modelo = preparar_modelo(enlace, distancia, X)
-    if sparse.issparse(X_modelo):
-        X_modelo = sparse.csr_matrix(X_modelo)
-    resultado = modelo.fit(X_modelo)
-    n = resultado.n_instancias
-    if not 2 <= k < n:
-        raise ValueError(f"k tiene que cumplir 2 <= k < {n} (número de instancias).")
-
+    if distancia not in ("cosine", "euclidean"):
+        raise ValueError("Para el modelo final la distancia tiene que ser 'cosine' o 'euclidean'.")
+    # Con coseno normalizamos: las distancias no cambian y los centroides (Ward, DB, CH) tienen sentido
+    X = normalizar_filas(X) if distancia == "cosine" else X
+    resultado = ClusteringJerarquico(enlace, distancia).fit(X)
+    if not 2 <= k < resultado.n_instancias:
+        raise ValueError(f"k tiene que cumplir 2 <= k < {resultado.n_instancias}.")
     etiquetas = resultado.etiquetas(k)
-    tamanos = np.bincount(etiquetas).astype(float)
-    miembros = sparse.csr_matrix((np.ones(n), (etiquetas, np.arange(n))), shape=(k, n))
-    sumas = miembros @ X_modelo
-    centroides = (sumas.toarray() if sparse.issparse(sumas) else np.asarray(sumas)) / tamanos[:, None]
-
-    # Davies-Bouldin y Calinski-Harabasz son euclídeas: con coseno se miden sobre filas normalizadas.
-    X_metricas = normalizar_filas(X_modelo) if modelo.distancia == "cosine" else X_modelo
-    try:
-        db = davies_bouldin(X_metricas, etiquetas)
-    except (MemoryError, ValueError):
-        db = None
-    metricas = {
-        "silhouette": silhouette_medio(matriz_de_evaluacion(resultado, X_modelo, distancia), etiquetas),
-        "davies_bouldin": db,
-        "calinski_harabasz": calinski_harabasz(X_metricas, etiquetas),
-        "correlacion_cofenetica": correlacion_cofenetica(resultado),
-    }
-    return ModeloEntrenado(
-        enlace=enlace, distancia=distancia, distancia_efectiva=modelo.distancia, k=int(k),
-        resultado=resultado, X_entrenamiento=X_modelo, etiquetas=etiquetas,
-        centroides=centroides, tamanos=tamanos, metricas=metricas,
-    )
+    C, tam, _ = centroides(X, etiquetas)
+    metricas = {**evaluar_corte(resultado, X, k), "cofenetica": correlacion_cofenetica(resultado)}
+    return ModeloEntrenado(enlace, distancia, k, resultado, X, etiquetas, C, tam, metricas)

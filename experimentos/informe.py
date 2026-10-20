@@ -1,11 +1,10 @@
-"""Informe HTML del banco de pruebas, para leerlo sin pelearse con la terminal."""
+"""Informe HTML del banco de pruebas"""
 from __future__ import annotations
 
 from datetime import datetime
 
 
 def _barra(valor: float, color: str) -> str:
-    """Barra horizontal para ver el valor de un vistazo."""
     ancho = max(0.0, min(1.0, valor)) * 100
     return (f'<div class="barra"><div class="relleno" style="width:{ancho:.0f}%;background:{color}"></div>'
             f'<span>{valor:.3f}</span></div>')

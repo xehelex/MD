@@ -45,6 +45,38 @@ git lfs pull
 Los cuatro modelos SVD están en LFS por su tamaño. Las matrices y los IDs están
 en Git normal y bastan para experimentar con los usuarios existentes.
 
+## La cadena completa, desde los XML
+
+Si partes de cero y quieres rehacerlo todo, este es el orden. Desde la raíz de
+`MD`, y con los XML de CLEF en una carpeta local:
+
+```powershell
+python -m preprocesador --datos "<ruta a los XML>" --guardar_csv
+python -m vectorizacion --salida resultados_prueba --quitar-vacias --sublinear-tf
+python -m vectorizacion.svd --entrada resultados_prueba --dimensiones 100
+python -m Clustering_jerarquico experimentar --entrada resultados_prueba_svd100
+python -m experimentos --entrada resultados_prueba_svd100
+python -m Clustering_jerarquico modelo --entrada resultados_prueba_svd100
+```
+
+El preprocesamiento tarda un par de minutos; el resto, segundos. Cada paso deja
+su carpeta de resultados y el siguiente la lee.
+
+## Consultar un texto nuevo
+
+Con el modelo ya entrenado, asigna un texto a un cluster y enseña los usuarios
+más parecidos dentro de él:
+
+```powershell
+python -m experimentos.consultar "I cannot stop gambling" --entrada resultados_prueba_svd100 --grafico consulta.png
+```
+
+El gráfico sitúa a cada usuario por su **distancia real** al texto, sin proyectar
+a 2D: si los vecinos aparecen pegados al cero, el texto ha encontrado a su gente;
+si salen amontonados con todos los demás, ha caído en ese cluster por descarte.
+
+Los detalles están en el [README del banco de pruebas](experimentos/README.md).
+
 ## Pruebas de integración
 
 Instala también las dependencias de `vectorizacion/requirements.txt` y ejecuta:

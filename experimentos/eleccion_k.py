@@ -1,11 +1,7 @@
-"""Elegir k leyendo el árbol, sin barrer el rango entero.
+"""Elegir k mirando los saltos del árbol, en vez de barrer todo el rango.
 
-Barrer k y quedarse con el mejor silhouette aquí no funciona: sale k=2 con el
-99,8% de la gente en un grupo. Y acelerar esa búsqueda tampoco arregla nada,
-porque el problema es el criterio, no el recorrido.
-
-El dendrograma ya lleva la respuesta dentro: donde el árbol da un salto grande
-al fusionar, es que esos dos grupos estaban lejos y no convenía juntarlos.
+Donde el árbol pega un salto grande al fusionar es que esos dos grupos estaban
+lejos y no convenía juntarlos. Ahí está el corte.
 """
 from __future__ import annotations
 
@@ -13,11 +9,10 @@ import numpy as np
 
 
 def inconsistencia(resultado, profundidad: int = 3) -> np.ndarray:
-    """Cuánto destaca cada fusión frente a las de su propio subárbol.
+    """Cuánto destaca cada fusión frente a las de su subárbol.
 
-    El salto en bruto no sirve: abajo del todo, donde se juntan usuarios casi
-    idénticos, los saltos relativos son enormes y se lleva el premio k=475.
-    Normalizando contra el vecindario de cada fusión, eso deja de pasar.
+    El salto en bruto no vale: en la base del árbol son enormes y se lleva el
+    premio un k absurdo. Normalizado contra el vecindario, ya no pasa.
     """
     n = resultado.n_instancias
     merges = resultado.merges
@@ -42,17 +37,10 @@ def inconsistencia(resultado, profundidad: int = 3) -> np.ndarray:
 
 def sugerir_k(resultado, k_min: int = 2, k_max: int = 30,
               profundidad: int = 3, cuantos: int = 3) -> list[tuple[int, float]]:
-    """Propone candidatos a k, de mejor a peor, con su puntuación.
+    """Candidatos a k, de mejor a peor, mirando la fusión que uniría k con k-1.
 
-    Mira la fusión que uniría k grupos en k-1: si destaca mucho sobre su
-    vecindario, es que no convenía hacerla y ahí está el corte.
-
-    Da candidatos, no una respuesta. Probado con datos sintéticos de k conocido,
-    el k verdadero sale entre los dos primeros casi siempre, pero no siempre el
-    primero. Sirve para acotar el rango, no para cerrar la decisión.
-
-    Con single y average devuelve cualquier cosa, pero es que ahí no hay
-    estructura que encontrar.
+    Da candidatos, no una respuesta: con datos sintéticos de k conocido el bueno
+    sale entre los dos primeros, pero no siempre el primero.
     """
     n = resultado.n_instancias
     if not 2 <= k_min <= k_max < n:
@@ -65,27 +53,21 @@ def sugerir_k(resultado, k_min: int = 2, k_max: int = 30,
 
 
 def k_max_recomendado(n: int) -> int:
-    """Regla habitual para acotar la busqueda: sqrt(n/2).
+    """Regla de andar por casa para acotar la busqueda: sqrt(n/2).
 
-    Con 480 usuarios da 15. No tiene mas fundamento que la experiencia, pero
-    evita barrer cientos de k que nadie va a usar.
+    Con 480 usuarios da 15. Evita barrer cientos de k que nadie va a usar.
     """
     return max(2, int(np.sqrt(n / 2)))
 
 
 def buscar_k_biseccion(criterio, k_min: int = 2, k_max: int = 15) -> tuple[int, float, int]:
-    """Busca el mejor k partiendo el rango por la mitad en cada paso.
+    """Mejor k partiendo el rango por la mitad. `criterio` es k -> puntuacion.
 
-    `criterio` es una funcion k -> puntuacion, a maximizar. Devuelve
-    (mejor_k, puntuacion, evaluaciones).
+    Compara los extremos y se queda con la mitad del que gana: O(log k_max) en
+    vez de O(k_max). Devuelve (mejor_k, puntuacion, evaluaciones).
 
-    En cada vuelta compara los dos extremos y se queda con la mitad del que va
-    ganando. Pasa de O(k_max) evaluaciones a O(log k_max).
-
-    OJO: esto da por supuesto que la curva tiene un unico maximo. Si tiene
-    varios picos puede quedarse en el que no es. Sobre nuestros datos el
-    silhouette NO es unimodal, asi que conviene contrastarlo con el barrido
-    completo antes de fiarse.
+    Ojo: supone un unico maximo. Con varios picos puede quedarse en el que no
+    es, y nuestro silhouette no es unimodal. Para eso esta buscar_k_por_bloques.
     """
     if not 2 <= k_min < k_max:
         raise ValueError("Tiene que cumplirse 2 <= k_min < k_max.")
@@ -113,14 +95,11 @@ def buscar_k_biseccion(criterio, k_min: int = 2, k_max: int = 15) -> tuple[int, 
 
 def buscar_k_por_bloques(criterio, k_min: int = 2, k_max: int = 15,
                          bloques: int = 4) -> tuple[int, float, int]:
-    """Como la biseccion pero sin jugarsela a que la curva tenga un solo pico.
+    """Como la biseccion pero sin jugarsela a que haya un solo pico.
 
-    Primero prueba unos pocos k repartidos por todo el rango. Mira cuales de
-    esos destacan sobre sus vecinos, y afina alrededor de cada uno. Asi un
-    segundo maximo no se pierde por haber descartado media tabla al principio.
-
-    Devuelve (mejor_k, puntuacion, evaluaciones). Sale mas caro que la
-    biseccion, pero sigue muy por debajo del barrido completo.
+    Prueba unos pocos k por todo el rango, mira cuales destacan sobre sus
+    vecinos y afina alrededor de cada uno. Asi no pierde un segundo maximo por
+    haber descartado media tabla al principio. Mas caro, pero seguro.
     """
     if not 2 <= k_min < k_max:
         raise ValueError("Tiene que cumplirse 2 <= k_min < k_max.")
@@ -158,10 +137,10 @@ def buscar_k_por_bloques(criterio, k_min: int = 2, k_max: int = 15,
 
 def salto_mayor(resultado, k_min: int = 2, k_max: int = 30,
                 cuantos: int = 3) -> list[tuple[int, float]]:
-    """Variante simple: el k donde más crece la altura al fusionar.
+    """El k donde más crece la altura al fusionar.
 
-    Más directa de explicar que la inconsistencia, pero se deja engañar por la
-    base del árbol, así que hay que acotarla a la zona alta sí o sí.
+    Más fácil de explicar que la inconsistencia, pero se deja engañar por la
+    base del árbol: hay que acotar el rango sí o sí.
     """
     n = resultado.n_instancias
     if not 2 <= k_min <= k_max < n - 1:

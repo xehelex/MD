@@ -1,8 +1,8 @@
 """Corte del dendrograma por tamaño mínimo de grupo.
 
-Pedir k grupos sobre estos datos devuelve 477/1/1/1, porque el encadenamiento
-se gasta el presupuesto despegando gente de una en una. Aquí se piden grupos
-de al menos `minimo` miembros y lo que no llega se aparta como atípico.
+Pedir k grupos aquí devuelve 477/1/1/1: el encadenamiento se gasta el
+presupuesto despegando gente de una en una. Esto pide grupos de al menos
+`minimo` miembros y aparta el resto como atípico.
 """
 from __future__ import annotations
 
@@ -30,11 +30,10 @@ def _arbol(resultado):
 def cortar_por_tamano(resultado, minimo: int = 10, max_grupos: int | None = None):
     """Devuelve (etiquetas, informe) exigiendo grupos de al menos `minimo`.
 
-    Los apartados van con etiqueta -1. Se baja por las fusiones más altas
-    primero. `minimo=1` reproduce el corte clásico.
+    Los apartados llevan etiqueta -1. `minimo=1` reproduce el corte clásico.
 
-    Ojo con el umbral: ponerlo alto borra los grupos pequeños, y aquí los
-    pequeños son los interesantes. Con 15 se perdía el de ludopatía.
+    Ojo con el umbral: subirlo borra los grupos pequeños, y aquí los pequeños
+    son los interesantes. Con 15 se perdía el de ludopatía.
     """
     if minimo < 1:
         raise ValueError("El tamaño mínimo tiene que ser al menos 1.")
@@ -97,8 +96,8 @@ def cortar_por_tamano(resultado, minimo: int = 10, max_grupos: int | None = None
 
 
 def k_equivalente(resultado, etiquetas: np.ndarray) -> int:
-    """Cuántos grupos pediría un corte clásico para aislar los mismos atípicos.
+    """Cuántos grupos pediría el corte clásico para aislar los mismos atípicos.
 
-    Si salen 9 grupos y aquí 46, el clásico habría gastado 37 en gente suelta.
+    Si salen 9 y aquí 46, el clásico habría gastado 37 en gente suelta.
     """
     return int(len(np.unique(etiquetas[etiquetas >= 0])) + (etiquetas == -1).sum())

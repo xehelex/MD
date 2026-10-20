@@ -83,6 +83,71 @@ en el primero.
 con etiqueta `-1`. Ojo con el umbral: subirlo borra los grupos pequeños, y aquí
 los pequeños suelen ser los interesantes.
 
+## Consultar un texto nuevo
+
+Asigna un texto a un cluster y enseña los usuarios más parecidos dentro de él.
+
+```powershell
+python -m experimentos.consultar "I cannot stop gambling" --entrada resultados_tfidf_completo_svd100
+```
+
+```
+ward / cosine / k = 10
+El texto cae en el cluster 1, con 19 usuarios.
+
+usuario           dist  texto
+------------------------------------------------------------------------------
+subject3358      0.195  26 M unmarried here. I never used to be a gambler be
+subject2325      0.197  Let me tell you my story. I am 31 and I started gamb
+```
+
+Sin texto lo pide por teclado. Con `--grafico consulta.png` guarda la nube de
+usuarios proyectada a 2D, con el texto marcado y sus vecinos resaltados.
+
+| Opción | Por defecto | |
+|---|---|---|
+| `--entrada` | obligatoria | La representación con la que se entrenó el modelo. |
+| `--modelo` | `resultados_clustering_completo/modelo.pkl` | |
+| `--textos` | `output/data_preprocesado.csv` | Para enseñar el texto de los vecinos. |
+| `--vecinos` | 5 | |
+| `--grafico` | — | Ruta del PNG. |
+
+El vectorizador y el SVD se resuelven solos leyendo el `resumen.json` de la
+carpeta, que guarda de dónde viene cada representación. Siempre con `transform`:
+reajustar el vocabulario con el texto nuevo invalidaría la comparación.
+
+**La distancia dice cuánto fiarse.** Un vecino a 0,19 significa que el texto ha
+encontrado a su gente; a 0,75, que ha caído en el grupo grande por descarte.
+
+El texto necesita al menos 3 palabras con contenido: las vacías (`I`, `can`,
+`the`) se descartan en el preproceso, igual que se hizo al entrenar.
+
+El gráfico usa PCA y no t-SNE porque PCA sabe proyectar puntos nuevos sobre un
+plano ya calculado; con t-SNE habría que rehacer la nube en cada consulta.
+
+## Bootstrap
+
+Mide cuánto depende el resultado de los usuarios concretos que tenemos. Saca
+muestras del propio conjunto **con reemplazo**, rehace el árbol y compara con la
+partición original. Cada muestra deja fuera un 37% por azar.
+
+```python
+from experimentos.bootstrap import bootstrap
+
+r = bootstrap(X, "ward", "cosine", k=10, repeticiones=50)
+print(r.resumen())      # ARI 0.340 [0.259, 0.401] en 50 remuestreos
+print(r.intervalo())    # (0.259, 0.401)
+print(r.aris)           # un valor por repetición, para el histograma
+```
+
+La media dice si el resultado aguanta; el intervalo, si además es consistente.
+Ward puntúa más bajo que `average` pero con un rango mucho más estrecho: saca
+menos nota y siempre la misma, mientras que `complete` depende de qué usuarios
+toquen.
+
+Con `single` el número sale inflado: los usuarios repetidos quedan a distancia 0
+entre sí y le regalan puentes para encadenar.
+
 ## Pruebas
 
 ```powershell

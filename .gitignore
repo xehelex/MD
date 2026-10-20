@@ -40,3 +40,17 @@ subject*.xml
 
 # La validación completa se regenera; conservar el informe anterior.
 resultados_clustering_completo/validacion.html
+
+# Matrices de prueba generadas en local al recorrer la cadena entera.
+resultados_prueba*/
+
+# Graficos de consulta, en la raiz. Se rehacen con:
+#   python -m experimentos.consultar "<texto>" --entrada <carpeta> --grafico <fichero>
+# Solo la raiz: los plots de resultados_clustering_completo si van al repo.
+/consulta*.png
+/cerca.png
+/lejos.png
+
+# Enlace al diccionario de jerga que algunos crean para lanzar el preprocesador
+# desde la raiz. Es de cada maquina; el fichero de verdad vive en preprocesador/.
+/chat_words.json

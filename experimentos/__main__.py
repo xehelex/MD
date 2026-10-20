@@ -8,6 +8,7 @@ from pathlib import Path
 from vectorizacion.matrices import cargar_matriz, cargar_usuarios
 
 from .banco import correlacion_silhouette_equilibrio, recorrer_rejilla
+from .informe import construir_html
 
 # Con single y complete, coseno y euclidea dan el mismo arbol (solo usan min y
 # max, y los vectores van normalizados L2). Con average y ward no, asi que esas
@@ -84,6 +85,8 @@ def main(argv=None):
     }
     (args.salida / "resumen.json").write_text(
         json.dumps(resumen, indent=2, ensure_ascii=False), encoding="utf-8")
+    (args.salida / "informe.html").write_text(
+        construir_html(filas, resumen["correlacion_silhouette_equilibrio"]), encoding="utf-8")
 
     # Dos criterios en paralelo: el k que elige el silhouette y el que propone
     # la forma del arbol. Si no coinciden, el equilibrio dice cual de los dos
@@ -113,7 +116,9 @@ def main(argv=None):
     print(f"Correlacion silhouette-equilibrio: {r:.3f}")
     if r < -0.5:
         print("Negativa y fuerte: el silhouette premia las particiones degeneradas.")
-    print(f"Tabla completa en: {(args.salida / 'rejilla.csv').resolve()}")
+    print()
+    print(f"Informe visual : {(args.salida / 'informe.html').resolve()}")
+    print(f"Tabla completa : {(args.salida / 'rejilla.csv').resolve()}")
 
 
 if __name__ == "__main__":

@@ -7,6 +7,19 @@ jerárquico. Las representaciones están en `resultados_tfidf/` en dos conjuntos
 [resultados_tfidf/README.md](resultados_tfidf/README.md). Los datos XML y los
 CSV del preprocesamiento se mantienen fuera de GitHub.
 
+## Menú
+
+Para no tener que acordarse de los comandos, desde la raíz de `MD`:
+
+```powershell
+.\.venv\Scripts\python.exe main.py
+```
+
+Tiene cinco opciones: preprocesar, vectorizar (TF-IDF, SVD, RoBERTa o PCA + UMAP),
+clustering (experimentar o generar `modelo.pkl` con la entrada de
+`Clustering_jerarquico/config.json`), experimentos (banco de pruebas, bootstrap y
+figuras de la memoria) e instancia nueva, que de momento solo funciona con TF-IDF o SVD.
+
 ## Empezar con los experimentos
 
 Desde la raíz de `MD`, con Python 3.10 o superior:

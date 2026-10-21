@@ -35,11 +35,21 @@ class TestSugerirK(unittest.TestCase):
             self.assertTrue(5 <= k <= 9)
 
     def test_rangos_imposibles(self):
+        """Las tres formas de pedir k rechazan lo mismo: k<2, rango al reves y k>=n."""
         resultado = ClusteringJerarquico(enlace="ward", distancia="euclidean").fit(grupos_separados(3))
-        for kwargs in ({"k_min": 1}, {"k_min": 8, "k_max": 4}, {"k_max": 10_000}):
-            with self.subTest(**kwargs):
+        casos = [
+            (sugerir_k, (resultado,), {"k_min": 1}),
+            (sugerir_k, (resultado,), {"k_min": 8, "k_max": 4}),
+            (sugerir_k, (resultado,), {"k_max": 10_000}),
+            (buscar_k_biseccion, (lambda k: 0.0,), {"k_min": 1, "k_max": 10}),
+            (buscar_k_biseccion, (lambda k: 0.0,), {"k_min": 9, "k_max": 9}),
+            (buscar_k_por_bloques, (lambda k: 0.0,), {"k_min": 1, "k_max": 10}),
+            (buscar_k_por_bloques, (lambda k: 0.0,), {"k_min": 2, "k_max": 10, "bloques": 1}),
+        ]
+        for funcion, args, kwargs in casos:
+            with self.subTest(funcion.__name__, **kwargs):
                 with self.assertRaises(ValueError):
-                    sugerir_k(resultado, **kwargs)
+                    funcion(*args, **kwargs)
 
 
 class TestSaltoMayor(unittest.TestCase):
@@ -82,12 +92,6 @@ class TestBiseccion(unittest.TestCase):
         self.assertEqual(k_max_recomendado(200), 10)
         self.assertGreaterEqual(k_max_recomendado(3), 2)
 
-    def test_rangos_imposibles(self):
-        for kw in ({"k_min": 1, "k_max": 10}, {"k_min": 9, "k_max": 9}):
-            with self.subTest(**kw):
-                with self.assertRaises(ValueError):
-                    buscar_k_biseccion(lambda k: 0.0, **kw)
-
 class TestPorBloques(unittest.TestCase):
     @staticmethod
     def dos_picos(k):
@@ -95,21 +99,12 @@ class TestPorBloques(unittest.TestCase):
         return max(1.40 - abs(k - 5) * 0.10, 1.50 - abs(k - 45) * 0.03, 0.1)
 
     def test_encuentra_el_pico_bueno_donde_la_biseccion_se_pierde(self):
-        por_bloques, _, _ = buscar_k_por_bloques(self.dos_picos, 2, 60, bloques=6)
+        por_bloques, _, evaluaciones = buscar_k_por_bloques(self.dos_picos, 2, 60, bloques=6)
         biseccion, _, _ = buscar_k_biseccion(self.dos_picos, 2, 60)
 
         self.assertEqual(por_bloques, 45)
         self.assertNotEqual(biseccion, 45)   # se queda en el pico de la izquierda
-
-    def test_sigue_costando_menos_que_el_barrido(self):
-        _, _, evaluaciones = buscar_k_por_bloques(self.dos_picos, 2, 60, bloques=6)
-        self.assertLess(evaluaciones, 59)
-
-    def test_rangos_imposibles(self):
-        for kw in ({"k_min": 1, "k_max": 10}, {"k_min": 2, "k_max": 10, "bloques": 1}):
-            with self.subTest(**kw):
-                with self.assertRaises(ValueError):
-                    buscar_k_por_bloques(lambda k: 0.0, **kw)
+        self.assertLess(evaluaciones, 40)    # 33 de 59: acierta y aun ahorra un tercio
 
 
 if __name__ == "__main__":

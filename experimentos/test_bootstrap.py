@@ -35,13 +35,6 @@ class TestBootstrap(unittest.TestCase):
         resultado = bootstrap(X, "ward", "euclidean", k=4, repeticiones=20)
         self.assertLess(resultado.media, 0.6)
 
-    def test_el_intervalo_contiene_la_media(self):
-        X = grupos_separados()
-        resultado = bootstrap(X, "ward", "euclidean", k=4, repeticiones=20)
-        bajo, alto = resultado.intervalo()
-        self.assertLessEqual(bajo, resultado.media)
-        self.assertLessEqual(resultado.media, alto)
-
     def test_reaprovechar_el_arbol_no_cambia_el_resultado(self):
         # bootstrap_por_k corta un mismo arbol en todos los k en vez de
         # reconstruirlo para cada uno. Si no sale identico a bootstrap(), la

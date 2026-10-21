@@ -54,3 +54,9 @@ resultados_prueba*/
 # Enlace al diccionario de jerga que algunos crean para lanzar el preprocesador
 # desde la raiz. Es de cada maquina; el fichero de verdad vive en preprocesador/.
 /chat_words.json
+
+# Plots que deja "python -m Clustering_jerarquico experimentar" al lanzarlo en
+# local para mirar la salida. Los de plots/{average,complete,single,ward} que ya
+# estan commiteados se quedan: esto solo evita que cada ejecucion anada un juego
+# nuevo con el nombre de la distancia por delante.
+resultados_clustering_completo/plots/cosine_*/

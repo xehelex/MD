@@ -84,13 +84,18 @@ def evaluar_corte(resultado, etiquetas: np.ndarray, minimo: int) -> dict:
 
 
 def recorrer_rejilla(matrices: dict, combinaciones, ks, minimo: int = 10,
-                     repeticiones: int = 0) -> list[dict]:
+                     repeticiones: int = 0, remuestreos: int = 0) -> list[dict]:
     """Ejecuta la rejilla completa y devuelve una fila por (matriz, enlace, k).
 
     `matrices` es {nombre: X}, `combinaciones` una lista de (enlace, distancia, p).
-    Con `repeticiones` > 0 se añade la estabilidad, que multiplica el tiempo por
-    ese número.
+    `repeticiones` añade la estabilidad (submuestreo al 80%) y `remuestreos` el
+    bootstrap. Las dos multiplican el tiempo por su número.
     """
+    # Aqui dentro y no arriba: bootstrap tiene su propio __main__, y si el
+    # paquete lo carga al importar, python -m experimentos.bootstrap avisa de
+    # que se esta ejecutando dos veces.
+    from .bootstrap import bootstrap_por_k
+
     filas = []
     for nombre, X in matrices.items():
         n = X.shape[0]
@@ -103,11 +108,14 @@ def recorrer_rejilla(matrices: dict, combinaciones, ks, minimo: int = 10,
             validos = [k for k in ks if k < n]
             estable = (estabilidad_por_k(X, resultado, enlace, distancia, p, validos, repeticiones)
                        if repeticiones > 0 else {})
+            arranque = (bootstrap_por_k(X, resultado, enlace, distancia, p, validos, remuestreos)
+                        if remuestreos > 0 else {})
 
             # Lo que opina el propio árbol sobre cada corte, sin mirar métricas.
             inc = inconsistencia(resultado)
 
             for k in validos:
+                media, ancho = arranque.get(k, (float("nan"), float("nan")))
                 filas.append({
                     "matriz": nombre,
                     "enlace": enlace,
@@ -115,6 +123,8 @@ def recorrer_rejilla(matrices: dict, combinaciones, ks, minimo: int = 10,
                     "k": k,
                     **evaluar_corte(resultado, resultado.etiquetas(k), minimo),
                     "estabilidad": estable.get(k, float("nan")),
+                    "bootstrap_ari": media,
+                    "bootstrap_ancho": ancho,
                     "inconsistencia": float(inc[n - k]),
                     "cofenetica": cofenetica,
                     "segundos_arbol": round(segundos, 3),

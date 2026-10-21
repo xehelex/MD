@@ -16,7 +16,7 @@
   "mejor_modelo": {
     "enlace": "ward",
     "distancia": "cosine",
-    "k": 2,
+    "k": 6,
     "archivo": "modelo.pkl"
   }
 }

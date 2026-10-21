@@ -23,7 +23,8 @@ COMBINACIONES = [
 
 COLUMNAS = ["matriz", "enlace", "distancia", "k", "silhouette", "equilibrio",
             "mayor_pct", "grupos_utiles", "instancias_sueltas", "tamanos",
-            "estabilidad", "inconsistencia", "cofenetica", "segundos_arbol"]
+            "estabilidad", "bootstrap_ari", "bootstrap_ancho",
+            "inconsistencia", "cofenetica", "segundos_arbol"]
 
 
 def main(argv=None):
@@ -38,6 +39,9 @@ def main(argv=None):
     parser.add_argument("--estabilidad", type=int, default=0, metavar="N",
                         help="Repeticiones de remuestreo al 80%% para medir estabilidad. "
                              "0 la desactiva; cada repetición reconstruye todos los árboles.")
+    parser.add_argument("--bootstrap", type=int, default=0, metavar="N",
+                        help="Remuestreos CON reemplazo. Añade bootstrap_ari y bootstrap_ancho. "
+                             "Mismo coste que --estabilidad: 0 lo desactiva.")
     parser.add_argument("--comprobar-entradas", action="store_true",
                         help="Comprueba matrices e IDs y termina sin ejecutar clustering ni guardar resultados.")
     args = parser.parse_args(argv)
@@ -68,7 +72,7 @@ def main(argv=None):
 
     ks = list(range(args.k_min, args.k_max + 1))
     filas = recorrer_rejilla(matrices, COMBINACIONES, ks, minimo=args.minimo,
-                             repeticiones=args.estabilidad)
+                             repeticiones=args.estabilidad, remuestreos=args.bootstrap)
 
     args.salida.mkdir(parents=True, exist_ok=True)
     with (args.salida / "rejilla.csv").open("w", newline="", encoding="utf-8") as f:

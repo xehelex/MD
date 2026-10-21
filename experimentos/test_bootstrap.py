@@ -4,7 +4,9 @@ import unittest
 
 import numpy as np
 
-from experimentos.bootstrap import bootstrap
+from Clustering_jerarquico.algoritmo import ClusteringJerarquico
+
+from experimentos.bootstrap import bootstrap, bootstrap_por_k, estabilidad_por_grupo
 
 
 def grupos_separados(k=4, por_grupo=25, semilla=0):
@@ -39,6 +41,33 @@ class TestBootstrap(unittest.TestCase):
         bajo, alto = resultado.intervalo()
         self.assertLessEqual(bajo, resultado.media)
         self.assertLessEqual(resultado.media, alto)
+
+    def test_reaprovechar_el_arbol_no_cambia_el_resultado(self):
+        # bootstrap_por_k corta un mismo arbol en todos los k en vez de
+        # reconstruirlo para cada uno. Si no sale identico a bootstrap(), la
+        # version rapida de la rejilla esta midiendo otra cosa.
+        X = grupos_separados(k=4, por_grupo=25)
+        arbol = ClusteringJerarquico(enlace="ward", distancia="euclidean").fit(X)
+        por_k = bootstrap_por_k(X, arbol, "ward", "euclidean", 2.0, [3, 4, 6], repeticiones=10)
+        for k, (media, ancho) in por_k.items():
+            with self.subTest(k=k):
+                suelto = bootstrap(X, "ward", "euclidean", k=k, repeticiones=10)
+                self.assertAlmostEqual(media, suelto.media, places=12)
+                self.assertAlmostEqual(ancho, suelto.ancho(), places=12)
+
+    def test_un_grupo_de_verdad_reaparece_y_el_inventado_no(self):
+        X = grupos_separados(k=4, por_grupo=25)
+        arbol = ClusteringJerarquico(enlace="ward", distancia="euclidean").fit(X)
+        # Con 4 grupos separados y k=4 los cuatro tienen que aguantar.
+        for g in estabilidad_por_grupo(X, arbol, "ward", "euclidean", 4, repeticiones=10):
+            with self.subTest(grupo=g.grupo):
+                self.assertGreater(g.jaccard, 0.85)
+
+        # Partiendo los mismos datos en 8, la mitad de los cortes son inventados.
+        arbol8 = ClusteringJerarquico(enlace="ward", distancia="euclidean").fit(X)
+        peor = min(estabilidad_por_grupo(X, arbol8, "ward", "euclidean", 8,
+                                         repeticiones=10), key=lambda g: g.jaccard)
+        self.assertLess(peor.jaccard, 0.85)
 
     def test_parametros_invalidos(self):
         X = grupos_separados()

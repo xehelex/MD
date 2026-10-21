@@ -38,7 +38,8 @@ El tiempo depende del número de usuarios y de la representación. La estabilida
 | `--salida` | `resultados_experimentos` | Dónde dejar la tabla. |
 | `--k-min` / `--k-max` | 2 y 20 | Rango de k. |
 | `--minimo` | 10 | Tamaño a partir del cual un grupo cuenta. |
-| `--estabilidad` | 0 | Repeticiones de remuestreo. Multiplica el tiempo por N. |
+| `--estabilidad` | 0 | Submuestreo al 80% sin reemplazo. Multiplica el tiempo por N. |
+| `--bootstrap` | 0 | Remuestreo con reemplazo. Mismo coste. |
 | `--comprobar-entradas` | desactivada | Valida matrices e IDs sin ejecutar clustering ni guardar resultados. |
 
 ## Salida
@@ -54,6 +55,8 @@ El tiempo depende del número de usuarios y de la representación. La estabilida
 | `instancias_sueltas` | Las que caen por debajo. |
 | `tamanos` | Los seis grupos mayores. |
 | `estabilidad` | ARI contra un reajuste al 80%. |
+| `bootstrap_ari` | ARI contra remuestreos con reemplazo. |
+| `bootstrap_ancho` | Ancho del intervalo 95%. Estrecho = da siempre lo mismo. |
 | `inconsistencia` | Cuánto destaca esa fusión frente a su vecindario. |
 | `cofenetica` | Distancias originales contra alturas del árbol. |
 | `segundos_arbol` | Coste de construir el árbol. |
@@ -127,26 +130,70 @@ plano ya calculado; con t-SNE habría que rehacer la nube en cada consulta.
 
 ## Bootstrap
 
-Mide cuánto depende el resultado de los usuarios concretos que tenemos. Saca
-muestras del propio conjunto **con reemplazo**, rehace el árbol y compara con la
-partición original. Cada muestra deja fuera un 37% por azar.
+Responde a "¿y si me hubieran tocado otros 598 usuarios?". Saca muestras del
+propio conjunto **con reemplazo**, rehace el árbol y compara con la partición
+original por ARI. Al coger n con reemplazo se queda fuera un 37% por azar, así
+que cada vuelta es un conjunto del mismo tamaño con distinta composición.
+
+```powershell
+python -m experimentos.bootstrap --entrada resultados_tfidf_completo_svd100 --k 7
+```
+
+```
+enlace       ARI     intervalo 95%   ancho  tamanos
+--------------------------------------------------------------------------
+single     0.441   [0.177, 0.796]   0.619  [592, 1, 1, 1, 1, 1, 1]
+average    0.530   [0.297, 0.801]   0.504  [577, 7, 5, 4, 2, 2, 1]
+complete   0.496   [0.303, 0.634]   0.332  [447, 71, 28, 25, 11, 9, 7]
+ward       0.432   [0.291, 0.559]   0.268  [231, 123, 92, 85, 30, 20, 17]
+```
+
+| Opción | Por defecto | |
+|---|---|---|
+| `--entrada` | obligatoria | Carpeta con `X.npz` o `X.npy`. |
+| `--k` | obligatoria | |
+| `--repeticiones` | 50 | 30 para mirar, 100 para la memoria. |
+| `--enlace` | los cuatro | Repetible. |
+| `--distancia` | `cosine` | |
+
+**La media engaña igual que el silhouette: `average` gana con 577/7/5/4/2/2/1.**
+Una partición degenerada saca ARI alto porque es trivial de repetir, no porque
+sea buena. Por eso está la columna de tamaños al lado.
+
+Lo que informa es el **ancho**. Ward saca la nota más baja y la saca siempre
+(0,268); single va de 0,177 a 0,796, o sea que depende por completo de qué
+usuarios le toquen. Para la memoria, "ward, ARI 0,43 ± 0,13" es defendible;
+"average, 0,53" sin el intervalo es hacer trampa.
+
+Con `single` el número sale inflado aparte de eso: los usuarios repetidos quedan
+a distancia 0 entre sí y le regalan puentes para encadenar.
+
+### En la rejilla
+
+Para comparar los cuatro enlaces por todos los k de una pasada, el banco lo trae
+como dos columnas más:
+
+```powershell
+python -m experimentos --entrada resultados_tfidf_completo_svd100 --bootstrap 50
+```
+
+El árbol de cada remuestreo se construye una vez y se corta en todos los k, igual
+que hace `--estabilidad`. Si no, no entra: con 50 remuestreos × 19 valores de k ×
+5 combinaciones serían casi 5.000 árboles en vez de 250.
+
+Da exactamente lo mismo que el comando suelto, y hay un test que lo comprueba
+([test_bootstrap.py](test_bootstrap.py)) porque es justo donde una optimización así
+se rompe sin avisar.
+
+### Desde Python, si hace falta el histograma
 
 ```python
 from experimentos.bootstrap import bootstrap
 
-r = bootstrap(X, "ward", "cosine", k=10, repeticiones=50)
-print(r.resumen())      # ARI 0.340 [0.259, 0.401] en 50 remuestreos
-print(r.intervalo())    # (0.259, 0.401)
-print(r.aris)           # un valor por repetición, para el histograma
+r = bootstrap(X, "ward", "cosine", k=7, repeticiones=50)
+print(r.resumen(), r.ancho())
+print(r.aris)           # un valor por repetición
 ```
-
-La media dice si el resultado aguanta; el intervalo, si además es consistente.
-Ward puntúa más bajo que `average` pero con un rango mucho más estrecho: saca
-menos nota y siempre la misma, mientras que `complete` depende de qué usuarios
-toquen.
-
-Con `single` el número sale inflado: los usuarios repetidos quedan a distancia 0
-entre sí y le regalan puentes para encadenar.
 
 ## Pruebas
 

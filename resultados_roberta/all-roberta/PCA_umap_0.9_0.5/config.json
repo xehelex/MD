@@ -1,0 +1,9 @@
+{
+  "modelo": "all-roberta",
+  "reduccion": "PCA_umap_0.9_0.5",
+  "datos": "output\\data.csv",
+  "model_name": "sentence-transformers/all-roberta-large-v1",
+  "max_length": 256,
+  "batch_size": 64,
+  "normalizar": true
+}

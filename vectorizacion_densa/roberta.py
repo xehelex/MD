@@ -29,13 +29,15 @@ class RobertaPorUsuario:
         model_name="FacebookAI/roberta-large",
         batch_size=32,
         max_length=512,
-        preprocess=True
+        preprocess=True,
+        normalizar = False
     ):
         self.data_path = Path(data_path)
         self.model_name = model_name
         self.batch_size = batch_size
         self.max_length = max_length
         self.preprocess = preprocess
+        self.normalizar = normalizar
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(f"Dispositivo: {self.device}")
@@ -124,6 +126,9 @@ class RobertaPorUsuario:
             mask = inputs["attention_mask"].unsqueeze(-1).float()
 
             emb = (hidden * mask).sum(dim=1) / mask.sum(dim=1)
+
+            if self.normalizar:
+                emb = torch.nn.functional.normalize(emb, p=2, dim=1)
 
             # Cada lote sale de la GPU en cuanto se calcula, así no se acumulan
             resultados.append(emb.cpu())

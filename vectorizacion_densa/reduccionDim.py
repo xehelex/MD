@@ -5,10 +5,12 @@ import numpy as np
 import umap
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
 
 # Para cargar y guardar
-CARPETA = Path(__file__).resolve().parent.parent / "resultados_roberta"
-SALIDA = Path(__file__).resolve().parent.parent / "resultados_roberta_PCA_umap"
+RAIZ = Path(__file__).resolve().parent.parent
+CARPETA = RAIZ / "resultados_roberta"
+SALIDA = RAIZ / "resultados_roberta_PCA_umap"
 
 
 def reducir_pca(X, var_pca=0.90):
@@ -28,6 +30,21 @@ def reducir_umap(X, n_umap=15, min_dist=0.0, n_neighbors=30, seed=42):
         metric="cosine",
         random_state=seed,
     ).fit_transform(X)
+
+def construir_reductor(n_usuarios, var_pca=0.90, n_umap=15,
+                       n_neighbors=30, min_dist=0.0, seed=42):
+    """Escalado -> PCA -> UMAP empaquetado en un Pipeline de scikit-learn."""
+    return Pipeline([
+        ("escalado", StandardScaler()),
+        ("pca", PCA(n_components=var_pca, svd_solver="full")),
+        ("umap", umap.UMAP(
+            n_components=n_umap,
+            n_neighbors=min(n_neighbors, n_usuarios - 1),
+            min_dist=min_dist,
+            metric="cosine",
+            random_state=seed,
+        )),
+    ])
 
 
 def main():

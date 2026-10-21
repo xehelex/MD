@@ -1,0 +1,9 @@
+{
+  "modelo": "multilingue",
+  "reduccion": "sin_reduccion",
+  "datos": "output\\data.csv",
+  "model_name": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+  "max_length": 128,
+  "batch_size": 128,
+  "normalizar": false
+}

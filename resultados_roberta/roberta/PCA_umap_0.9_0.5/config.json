@@ -1,0 +1,9 @@
+{
+  "modelo": "roberta",
+  "reduccion": "PCA_umap_0.9_0.5",
+  "datos": "output\\data.csv",
+  "model_name": "FacebookAI/roberta-large",
+  "max_length": 512,
+  "batch_size": 32,
+  "normalizar": false
+}

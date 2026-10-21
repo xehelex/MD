@@ -98,9 +98,11 @@ class TestCompleto(unittest.TestCase):
         self.assertEqual(resumen["configuraciones_evaluadas"], 5)
 
     def test_entrada_jerarquica_carga(self):
-        from Clustering_jerarquico.cli import cargar_configuracion, main as jerarquico
+        from Clustering_jerarquico.__main__ import main as jerarquico
 
-        self.assertEqual(cargar_configuracion()["entrada"], "resultados_tfidf_completo")
+        config = json.loads((Path(__file__).parent.parent / "Clustering_jerarquico" / "config.json").read_text(encoding="utf-8"))
+        self.assertTrue(config["entrada"].startswith("resultados_tfidf/datos_1_a_600/"))
+        self.assertTrue((Path(__file__).parent.parent / config["entrada"]).is_dir())
         with redirect_stdout(io.StringIO()), self.assertRaises(SystemExit) as salida:
             jerarquico(["--help"])
         self.assertEqual(salida.exception.code, 0)

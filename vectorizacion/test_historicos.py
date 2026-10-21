@@ -88,14 +88,27 @@ class TestHistoricos(unittest.TestCase):
         self.assertFalse(destino.exists())
 
     def test_lanzador_incluye_ocho_entradas_y_opciones(self):
-        from experimentos.todas import ENTRADAS, main
+        from experimentos.todas import entradas as rutas, main
         with patch("experimentos.todas.experimentar") as ejecutar:
             main(["--comprobar-entradas", "--estabilidad", "5"])
         argumentos = ejecutar.call_args.args[0]
         entradas = [argumentos[i + 1] for i, valor in enumerate(argumentos) if valor == "--entrada"]
-        self.assertEqual(entradas, list(ENTRADAS))
+        self.assertEqual(entradas, [str(r) for r in rutas("datos_1_a_600")])
         self.assertEqual(len(set(entradas)), 8)
+        self.assertTrue(all(Path(e).parent == Path("resultados_tfidf/datos_1_a_600") for e in entradas))
         self.assertEqual(argumentos[-3:], ["--comprobar-entradas", "--estabilidad", "5"])
+
+    def test_lanzador_conjunto_completo_sin_historicos(self):
+        from experimentos.todas import main
+        with patch("experimentos.todas.experimentar") as ejecutar:
+            main(["--conjunto", "datos_completos", "--comprobar-entradas"])
+        argumentos = ejecutar.call_args.args[0]
+        entradas = [argumentos[i + 1] for i, valor in enumerate(argumentos) if valor == "--entrada"]
+        self.assertEqual(len(set(entradas)), 6)
+        self.assertTrue(all(Path(e).parent == Path("resultados_tfidf/datos_completos") for e in entradas))
+        self.assertFalse(any("historico" in e for e in entradas))
+        self.assertNotIn("--conjunto", argumentos)
+        self.assertEqual(argumentos[-1], "--comprobar-entradas")
 
 
 if __name__ == "__main__":

@@ -21,7 +21,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--datos", type=Path, default=Path("output/data_preprocesado.csv"))
     parser.add_argument("--salida", type=Path,
-                        help="Carpeta nueva o vacía; por defecto resultados_tfidf[_caracteres4]_completo.")
+                        help="Carpeta nueva o vacía; por defecto resultados_tfidf/datos_1_a_600/resultados_tfidf[_caracteres4]_completo.")
     parser.add_argument("--representacion", choices=("palabras", "caracteres4"), default="palabras")
     parser.add_argument("--ngramas", type=int, default=1, help="Longitud máxima para palabras; caracteres4 usa siempre 4.")
     parser.add_argument("--min-df", type=int, default=3)
@@ -32,7 +32,8 @@ def main(argv=None):
                         help="Filtra las palabras vacias inglesas (NLTK), conservando las negaciones.")
     args = parser.parse_args(argv)
     if args.salida is None:
-        args.salida = Path("resultados_tfidf_caracteres4_completo" if args.representacion == "caracteres4"
+        args.salida = Path("resultados_tfidf", "datos_1_a_600",
+                           "resultados_tfidf_caracteres4_completo" if args.representacion == "caracteres4"
                            else "resultados_tfidf_completo")
     if args.representacion == "caracteres4" and args.ngramas != 1:
         parser.error("No uses --ngramas con caracteres4: su longitud ya está fijada en 4.")

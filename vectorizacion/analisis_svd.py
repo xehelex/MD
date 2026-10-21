@@ -174,7 +174,7 @@ def analizar(entradas, salida, dimensiones=(50, 100, 200, 300, 400, 500), umbral
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--entrada", type=Path, action="append", required=True)
-    parser.add_argument("--salida", type=Path, default=Path("resultados_analisis_svd"))
+    parser.add_argument("--salida", type=Path, default=Path("resultados_tfidf/datos_1_a_600/resultados_analisis_svd"))
     parser.add_argument("--dimensiones", type=int, nargs="+", default=[50, 100, 200, 300, 400, 500])
     parser.add_argument("--umbrales", type=float, nargs="+", default=[0.90, 0.95])
     args = parser.parse_args(argv)

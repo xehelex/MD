@@ -1,0 +1,42 @@
+{
+  "modo": "completo",
+  "sklearn_version": "1.9.1",
+  "configuracion": {
+    "datos": "output\\datos_completos\\data_preprocesado.csv",
+    "salida": "resultados_tfidf\\datos_completos\\resultados_tfidf_caracteres4_completo",
+    "representacion": "caracteres4",
+    "ngramas": 1,
+    "min_df": 3,
+    "max_df": 1.0,
+    "max_features": null,
+    "sublinear_tf": false,
+    "quitar_vacias": false
+  },
+  "usuarios": 2344,
+  "entrada": {
+    "filas_csv": 836472,
+    "filas_descartadas": 0,
+    "usuarios_en_csv": 2344,
+    "usuarios_descartados_sin_texto": [],
+    "orden_usuarios": "ID lexicográfico ascendente"
+  },
+  "datos_sha256": "ad18829dce4766401ad4b0990e61a609d2b99098edd11e62a6782accd22355a3",
+  "publicaciones_totales": 836472,
+  "publicaciones_utiles": 836472,
+  "dimensiones": 109148,
+  "analizador": "char",
+  "ngram_range": [
+    4,
+    4
+  ],
+  "matriz": {
+    "archivo": "X.npz",
+    "shape": [
+      2344,
+      109148
+    ],
+    "nnz": 14748655
+  },
+  "usuarios_vector_cero": [],
+  "alcance": "TF-IDF ajustado con todos los usuarios del CSV. El remuestreo de X evalúa el clustering con representación fija."
+}

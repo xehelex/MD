@@ -1,4 +1,4 @@
 # Modelos SVD: mantener los binarios grandes fuera del historial Git ordinario.
-resultados_*/svd.joblib filter=lfs diff=lfs merge=lfs -text
+resultados_tfidf/**/svd.joblib filter=lfs diff=lfs merge=lfs -text
 # Matplotlib incluye espacios finales en las rutas SVG generadas.
-resultados_analisis_svd/*.svg -whitespace
+resultados_tfidf/**/resultados_analisis_svd/*.svg -whitespace

@@ -77,7 +77,7 @@ def preparar(entrada, referencia, salida):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--entrada", type=Path, required=True, help="Carpeta histórica con train y test.")
-    parser.add_argument("--referencia", type=Path, default=Path("resultados_tfidf_completo"))
+    parser.add_argument("--referencia", type=Path, default=Path("resultados_tfidf/datos_1_a_600/resultados_tfidf_completo"))
     parser.add_argument("--salida", type=Path, help="Por defecto <entrada>_historico_alineado.")
     args = parser.parse_args(argv)
     salida = args.salida if args.salida is not None else args.entrada.with_name(args.entrada.name + "_historico_alineado")

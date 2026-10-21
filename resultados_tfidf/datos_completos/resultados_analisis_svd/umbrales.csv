@@ -1,0 +1,5 @@
+representacion,umbral,dimensiones,varianza_acumulada,varianza_dimension_anterior
+resultados_tfidf_completo,0.9,1521,0.9000103537264931,0.8998120553102593
+resultados_tfidf_completo,0.95,1816,0.9501298750935333,0.9499868367589153
+resultados_tfidf_caracteres4_completo,0.9,1440,0.9001819894466558,0.8999847588450941
+resultados_tfidf_caracteres4_completo,0.95,1743,0.9501185040821251,0.9499839881172341

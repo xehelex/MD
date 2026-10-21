@@ -33,6 +33,11 @@ resultados_var_*/
 # Salidas del banco de pruebas: python -m experimentos --entrada <carpeta>
 resultados_experimentos*/
 
+# Modelos SVD al 95 % de los datos completos (424 MB y 686 MB): demasiado
+# grandes incluso para LFS. Se rehacen con los comandos de resultados_tfidf/README.md.
+resultados_tfidf/datos_completos/*_svd95pct/svd.joblib
+resultados_tfidf/datos_completos/*_regenerado/
+
 # Los XML de CLEF NO van al repo. Se descargan aparte y se dejan en local.
 data_*/
 subject*.xml

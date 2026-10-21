@@ -1,8 +1,11 @@
 # Proyecto de clustering: CLEF gambling
 
-El proyecto incluye preprocesamiento, ocho representaciones comparables de los
-mismos 598 usuarios y clustering jerárquico. Los datos XML y los CSV del
-preprocesamiento se mantienen fuera de GitHub.
+El proyecto incluye preprocesamiento, representaciones TF-IDF/SVD y clustering
+jerárquico. Las representaciones están en `resultados_tfidf/` en dos conjuntos:
+`datos_1_a_600` (ocho representaciones de 598 usuarios) y `datos_completos`
+(seis representaciones de 2.344 usuarios, las cinco carpetas de CLEF). Ver
+[resultados_tfidf/README.md](resultados_tfidf/README.md). Los datos XML y los
+CSV del preprocesamiento se mantienen fuera de GitHub.
 
 ## Empezar con los experimentos
 
@@ -13,6 +16,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r experimentos/requirements.txt
 .\.venv\Scripts\python.exe -m experimentos.todas --comprobar-entradas
 .\.venv\Scripts\python.exe -m experimentos.todas --estabilidad 5
+.\.venv\Scripts\python.exe -m experimentos.todas --conjunto datos_completos --estabilidad 5
 ```
 
 La [guía de las ocho representaciones](experimentos/GUIA_TODAS.md) explica las
@@ -25,7 +29,7 @@ métricas silhouette, Davies-Bouldin y Calinski-Harabasz:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r Clustering_jerarquico/requirements.txt
-.\.venv\Scripts\python.exe -m Clustering_jerarquico --entrada resultados_tfidf_completo_svd95pct --salida resultados_clustering_svd95pct
+.\.venv\Scripts\python.exe -m Clustering_jerarquico --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_completo_svd95pct --salida resultados_clustering_svd95pct
 ```
 
 Consulta la [documentación del clustering](Clustering_jerarquico/README.md) para

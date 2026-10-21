@@ -1,10 +1,22 @@
-# Experimentos con las ocho representaciones
+# Experimentos con todas las representaciones
+
+Las representaciones están en `resultados_tfidf/`, separadas en dos conjuntos
+(detalles en [resultados_tfidf/README.md](../resultados_tfidf/README.md)):
+
+| Conjunto | Usuarios | Entradas | Lanzador |
+|---|---:|---:|---|
+| `datos_1_a_600` | 598 | 8 | `python -m experimentos.todas` |
+| `datos_completos` | 2.344 | 6 (sin históricos) | `python -m experimentos.todas --conjunto datos_completos` |
+
+Cada lanzamiento guarda en `resultados_experimentos_todas_<conjunto>`. El resto
+de esta guía describe el conjunto de los 600; para el completo, añade
+`--conjunto datos_completos` a los comandos de `experimentos.todas`.
 
 Ejecuta desde la raíz de `MD`, con Python 3.10 o superior. Para experimentar con
 las matrices ya generadas no necesitas los XML, los CSV del preprocesado ni los
 modelos `.joblib`: necesitas el código, `X.npz` o `X.npy` y `usuarios.json` de
-cada una de estas ocho carpetas. Conserva también los resúmenes para interpretar
-los resultados.
+cada una de estas ocho carpetas de `resultados_tfidf/datos_1_a_600/`. Conserva
+también los resúmenes para interpretar los resultados.
 
 | Carpeta | Dimensiones | Origen |
 |---|---:|---|
@@ -46,7 +58,7 @@ ejecuta clustering ni guarda resultados.
 
 Evalúa las cinco combinaciones de distancia/enlace del banco existente, para
 valores de k entre 2 y 20. Guarda `rejilla.csv` y `resumen.json` en
-`resultados_experimentos_todas`. Para repetir, elige otro nombre con `--salida`
+`resultados_experimentos_todas_datos_1_a_600`. Para repetir, elige otro nombre con `--salida`
 si quieres conservar el informe anterior.
 
 Para incluir la estabilidad con cinco repeticiones:
@@ -65,7 +77,7 @@ estas carpetas y conserva sus gráficas, Ward, Davies-Bouldin y Calinski-Harabas
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r Clustering_jerarquico/requirements.txt
-.\.venv\Scripts\python.exe -m Clustering_jerarquico --entrada resultados_tfidf_completo_svd95pct --salida resultados_clustering_svd95pct
+.\.venv\Scripts\python.exe -m Clustering_jerarquico --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_completo_svd95pct --salida resultados_clustering_svd95pct
 ```
 
 Su configuración controla los enlaces, el rango de k y los experimentos
@@ -92,8 +104,8 @@ Conserva las dos carpetas históricas originales y `resultados_tfidf_completo`
 como referencia. Instala las dependencias de `vectorizacion/requirements.txt` y ejecuta:
 
 ```powershell
-.\.venv\Scripts\python.exe -m vectorizacion.preparar_historicos --entrada resultados_tfidf
-.\.venv\Scripts\python.exe -m vectorizacion.preparar_historicos --entrada resultados_tfidf_caracteres4
+.\.venv\Scripts\python.exe -m vectorizacion.preparar_historicos --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf
+.\.venv\Scripts\python.exe -m vectorizacion.preparar_historicos --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_caracteres4
 ```
 
 Si las salidas ya existen, indica carpetas nuevas con `--salida` y pásalas al

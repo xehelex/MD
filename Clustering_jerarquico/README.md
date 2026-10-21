@@ -33,7 +33,7 @@ Desde la carpeta raíz del proyecto (la que contiene `Clustering_jerarquico/` y 
 python -m Clustering_jerarquico                 # pregunta: 1) experimentar  2) generar modelo.pkl
 python -m Clustering_jerarquico experimentar
 python -m Clustering_jerarquico modelo
-python -m Clustering_jerarquico experimentar --entrada resultados_tfidf_completo_svd95pct --salida resultados_clustering_svd95pct
+python -m Clustering_jerarquico experimentar --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_completo_svd95pct --salida resultados_clustering_svd95pct
 ```
 
 1. **experimentar**: para cada distancia y enlace ajusta el árbol una vez, busca el mejor k con cada criterio, imprime una tabla y sugiere el bloque `mejor_modelo`.

@@ -19,13 +19,13 @@ Desde la carpeta `MD`:
 
 ```powershell
 python -m pip install -r experimentos/requirements.txt
-python -m experimentos --entrada resultados_tfidf_completo
+python -m experimentos --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_completo
 ```
 
 Repite `--entrada` para comparar varias matrices:
 
 ```powershell
-python -m experimentos --entrada resultados_tfidf_completo --entrada resultados_tfidf_caracteres4_completo
+python -m experimentos --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_completo --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_caracteres4_completo
 ```
 
 El tiempo depende del número de usuarios y de la representación. La estabilidad reconstruye árboles adicionales.
@@ -91,7 +91,7 @@ los pequeños suelen ser los interesantes.
 Asigna un texto a un cluster y enseña los usuarios más parecidos dentro de él.
 
 ```powershell
-python -m experimentos.consultar "I cannot stop gambling" --entrada resultados_tfidf_completo_svd100
+python -m experimentos.consultar "I cannot stop gambling" --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_completo_svd100
 ```
 
 ```
@@ -136,7 +136,7 @@ original por ARI. Al coger n con reemplazo se queda fuera un 37% por azar, así
 que cada vuelta es un conjunto del mismo tamaño con distinta composición.
 
 ```powershell
-python -m experimentos.bootstrap --entrada resultados_tfidf_completo_svd100 --k 7
+python -m experimentos.bootstrap --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_completo_svd100 --k 7
 ```
 
 ```
@@ -174,7 +174,7 @@ Para comparar los cuatro enlaces por todos los k de una pasada, el banco lo trae
 como dos columnas más:
 
 ```powershell
-python -m experimentos --entrada resultados_tfidf_completo_svd100 --bootstrap 50
+python -m experimentos --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_completo_svd100 --bootstrap 50
 ```
 
 El árbol de cada remuestreo se construye una vez y se corta en todos los k, igual
@@ -210,8 +210,8 @@ Cada entrada contiene todos los usuarios disponibles tras el preprocesamiento. L
 Primero genera SVD siguiendo el README de `vectorizacion`. Luego:
 
 ```powershell
-python -m experimentos --entrada resultados_tfidf_completo --entrada resultados_tfidf_completo_svd100 --salida resultados_experimentos_svd_palabras
-python -m experimentos --entrada resultados_tfidf_caracteres4_completo --entrada resultados_tfidf_caracteres4_completo_svd100 --salida resultados_experimentos_svd_caracteres
+python -m experimentos --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_completo --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_completo_svd100 --salida resultados_experimentos_svd_palabras
+python -m experimentos --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_caracteres4_completo --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_caracteres4_completo_svd100 --salida resultados_experimentos_svd_caracteres
 ```
 
 Las matrices SVD se cargan como arrays densos, sin convertirlas a dispersas.

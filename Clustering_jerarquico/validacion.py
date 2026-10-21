@@ -314,7 +314,7 @@ así que con cualquier otra métrica no debe dejarse construir.</p>
 
 def main():
     raiz = Path(__file__).parent.parent
-    X = load_npz(raiz / "resultados_tfidf_completo" / "X.npz").tocsr()
+    X = load_npz(raiz / "resultados_tfidf" / "datos_1_a_600" / "resultados_tfidf_completo" / "X.npz").tocsr()
     A = X.toarray()
     n, d = X.shape
 

@@ -41,13 +41,23 @@ def resolver_cadena(carpeta: Path) -> tuple[Path, Path | None]:
     carpeta = Path(carpeta)
     svd = carpeta / "svd.joblib"
     if not svd.is_file():
+        if (carpeta / "X.npy").is_file():
+            # Carpeta SVD sin modelo: los de 95 % de datos_completos no se suben por tamaño.
+            raise FileNotFoundError(
+                f"Falta {svd}. Si es un modelo grande que no está en Git, regenéralo con "
+                "los comandos de resultados_tfidf/README.md; si no, ejecuta git lfs pull.")
         return carpeta, None
 
     resumen = json.loads((carpeta / "resumen.json").read_text(encoding="utf-8"))
     origen = resumen.get("configuracion", {}).get("entrada")
     if not origen:
         raise ValueError(f"{carpeta} tiene svd.joblib pero su resumen.json no dice de donde viene.")
-    return Path(origen), svd
+    origen = Path(origen)
+    # El resumen guarda la ruta de cuando se generó; si las carpetas se han movido
+    # juntas (p. ej. a resultados_tfidf/datos_1_a_600), el TF-IDF es su vecina.
+    if not (origen / "vectorizador.joblib").is_file():
+        origen = carpeta.parent / origen.name
+    return origen, svd
 
 
 class Clasificador:
@@ -62,6 +72,11 @@ class Clasificador:
         self.svd = joblib.load(ruta_svd) if ruta_svd else None
         self.usuarios = [u["usuario"] for u in
                          json.loads((Path(carpeta_representacion) / "usuarios.json").read_text(encoding="utf-8"))]
+        if len(self.usuarios) != self.modelo.X.shape[0]:
+            raise ValueError(
+                f"{carpeta_representacion} tiene {len(self.usuarios)} usuarios y el modelo se entreno con "
+                f"{self.modelo.X.shape[0]}: no son la misma representacion (¿datos_1_a_600 frente a datos_completos?). "
+                "Entrena el modelo con esa carpeta o pasa la carpeta con la que se entreno.")
         self.preprocesador = preprocesador
         self.textos = self._cargar_textos(csv_textos) if csv_textos else {}
 

@@ -1,5 +1,10 @@
 # Vectorización completa: un vector por usuario
 
+Los resultados están en `resultados_tfidf/`, en dos conjuntos: `datos_1_a_600`
+(lo que describe este README) y `datos_completos` (las cinco carpetas de CLEF,
+2.344 usuarios). Los comandos y cifras del conjunto completo están en
+[resultados_tfidf/README.md](../resultados_tfidf/README.md).
+
 Para ejecutar experimentos con las **ocho representaciones**, incluidas las dos
 históricas alineadas, consulta [la guía para los compañeros](../experimentos/GUIA_TODAS.md).
 
@@ -45,18 +50,18 @@ está excluida de Git. La vectorización no vuelve a lematizar ni limpiar el CSV
 **TF-IDF de palabras:**
 
 ```powershell
-.\.venv\Scripts\python.exe -m vectorizacion --representacion palabras --salida resultados_tfidf_completo
+.\.venv\Scripts\python.exe -m vectorizacion --representacion palabras --salida resultados_tfidf/datos_1_a_600/resultados_tfidf_completo
 ```
 
 **TF-IDF de fragmentos de cuatro caracteres:**
 
 ```powershell
-.\.venv\Scripts\python.exe -m vectorizacion --representacion caracteres4 --salida resultados_tfidf_caracteres4_completo
+.\.venv\Scripts\python.exe -m vectorizacion --representacion caracteres4 --salida resultados_tfidf/datos_1_a_600/resultados_tfidf_caracteres4_completo
 ```
 
 Para usar otro CSV, añade `--datos "C:\ruta\al\data_preprocesado.csv"`.
 Para repetir la ejecución, usa una carpeta nueva, por ejemplo
-`--salida resultados_tfidf_completo_v2`. No se sobrescriben carpetas con contenido.
+`--salida resultados_tfidf/datos_1_a_600/resultados_tfidf_completo_v2`. No se sobrescriben carpetas con contenido.
 
 Se mantienen `min_df=3` usuarios, TF lineal, IDF suavizado y normalización L2.
 Los resultados se guardan como matrices dispersas float32. Los fragmentos no
@@ -78,10 +83,10 @@ El resumen identifica descartes dentro del CSV; no puede recuperar usuarios que
 el preprocesador ya haya eliminado antes de exportarlo. Revisar también el aviso
 de sujetos sin texto útil que imprime el preprocesador.
 
-Las carpetas antiguas `resultados_tfidf` y `resultados_tfidf_caracteres4` conservan
+Las carpetas antiguas `resultados_tfidf/datos_1_a_600/resultados_tfidf` y `resultados_tfidf/datos_1_a_600/resultados_tfidf_caracteres4` conservan
 los resultados anteriores con train/test. No se han convertido ni sobrescrito.
-Sus copias `resultados_tfidf_historico_alineado` y
-`resultados_tfidf_caracteres4_historico_alineado` reúnen train y test, conservan
+Sus copias `resultados_tfidf/datos_1_a_600/resultados_tfidf_historico_alineado` y
+`resultados_tfidf/datos_1_a_600/resultados_tfidf_caracteres4_historico_alineado` reúnen train y test, conservan
 los valores originales y alinean las filas con los 598 usuarios actuales.
 El vocabulario y los IDF históricos siguen siendo los ajustados con 480 usuarios.
 Los experimentos nuevos leen `X.npz` (dispersa) o `X.npy` (densa); no hay que
@@ -107,9 +112,9 @@ Los usuarios nuevos deben pasar por el mismo preprocesamiento. No volver a usar
 ## 6. Ejecutar clustering y comprobaciones
 
 ```powershell
-.\.venv\Scripts\python.exe -m experimentos --entrada resultados_tfidf_completo --entrada resultados_tfidf_caracteres4_completo
-.\.venv\Scripts\python.exe -m experimentos --entrada resultados_tfidf_completo --estabilidad 5
-.\.venv\Scripts\python.exe -m Clustering_jerarquico --entrada resultados_tfidf_completo
+.\.venv\Scripts\python.exe -m experimentos --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_completo --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_caracteres4_completo
+.\.venv\Scripts\python.exe -m experimentos --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_completo --estabilidad 5
+.\.venv\Scripts\python.exe -m Clustering_jerarquico --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_completo
 .\.venv\Scripts\python.exe -m unittest vectorizacion.test_tfidf vectorizacion.test_completo
 .\.venv\Scripts\python.exe -m vectorizacion --help
 ```
@@ -132,12 +137,12 @@ a leer ni preprocesar los textos. Es una reducción de dimensionalidad, no un
 embedding contextual preentrenado. Se ajusta con todos los usuarios.
 
 ```powershell
-.\.venv\Scripts\python.exe -m vectorizacion.svd --entrada resultados_tfidf_completo
-.\.venv\Scripts\python.exe -m vectorizacion.svd --entrada resultados_tfidf_caracteres4_completo
+.\.venv\Scripts\python.exe -m vectorizacion.svd --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_completo
+.\.venv\Scripts\python.exe -m vectorizacion.svd --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_caracteres4_completo
 ```
 
-Esto crea `resultados_tfidf_completo_svd100` y
-`resultados_tfidf_caracteres4_completo_svd100`. Los TF-IDF de entrada se conservan.
+Esto crea `resultados_tfidf/datos_1_a_600/resultados_tfidf_completo_svd100` y
+`resultados_tfidf/datos_1_a_600/resultados_tfidf_caracteres4_completo_svd100`. Los TF-IDF de entrada se conservan.
 No hacen falta dependencias adicionales a las de vectorización.
 
 | Archivo de SVD | Contenido |
@@ -164,14 +169,14 @@ en el resumen para revisarlas antes del clustering.
 ```python
 from vectorizacion.matrices import cargar_matriz
 
-X = cargar_matriz("resultados_tfidf_completo_svd100")  # ndarray, 598 × 100
+X = cargar_matriz("resultados_tfidf/datos_1_a_600/resultados_tfidf_completo_svd100")  # ndarray, 598 × 100
 # La misma función carga X.npz como matriz dispersa.
 ```
 
 ```powershell
-.\.venv\Scripts\python.exe -m experimentos --entrada resultados_tfidf_completo --entrada resultados_tfidf_completo_svd100 --salida resultados_experimentos_svd_palabras
-.\.venv\Scripts\python.exe -m experimentos --entrada resultados_tfidf_caracteres4_completo --entrada resultados_tfidf_caracteres4_completo_svd100 --salida resultados_experimentos_svd_caracteres
-.\.venv\Scripts\python.exe -m Clustering_jerarquico --entrada resultados_tfidf_completo_svd100
+.\.venv\Scripts\python.exe -m experimentos --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_completo --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_completo_svd100 --salida resultados_experimentos_svd_palabras
+.\.venv\Scripts\python.exe -m experimentos --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_caracteres4_completo --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_caracteres4_completo_svd100 --salida resultados_experimentos_svd_caracteres
+.\.venv\Scripts\python.exe -m Clustering_jerarquico --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_completo_svd100
 .\.venv\Scripts\python.exe -m unittest vectorizacion.test_svd
 ```
 
@@ -198,10 +203,10 @@ Desde la raíz de `MD`, con los TF-IDF completos ya generados:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r vectorizacion/requirements.txt
-.\.venv\Scripts\python.exe -m vectorizacion.analisis_svd --entrada resultados_tfidf_completo --entrada resultados_tfidf_caracteres4_completo
+.\.venv\Scripts\python.exe -m vectorizacion.analisis_svd --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_completo --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_caracteres4_completo
 ```
 
-Se crea `resultados_analisis_svd` con:
+Se crea `resultados_tfidf/datos_1_a_600/resultados_analisis_svd` con:
 
 | Archivo | Para qué sirve |
 |---|---|
@@ -217,7 +222,7 @@ las muestran como porcentajes. Un umbral no alcanzado se indica explícitamente.
 Las dimensiones solicitadas fuera de rango se omiten de la tabla y se registran
 en el JSON. Se exige la misma lista y orden de usuarios para comparar entradas.
 
-Para repetir, añade `--salida resultados_analisis_svd_v2`. Puedes cambiar los
+Para repetir, añade `--salida resultados_tfidf/datos_1_a_600/resultados_analisis_svd_v2`. Puedes cambiar los
 puntos de la tabla con `--dimensiones 50 100 150 200 300` y los objetivos con
 `--umbrales 0.80 0.90 0.95`. La búsqueda del primer cruce siempre recorre todas
 las dimensiones de la curva, aunque no aparezcan en esa tabla.
@@ -249,8 +254,8 @@ Para comprobar el análisis:
 
 ## 9. Probar modelos con al menos un 95 % de varianza
 
-Las carpetas `resultados_tfidf_completo_svd95pct` y
-`resultados_tfidf_caracteres4_completo_svd95pct` contienen nuevas representaciones
+Las carpetas `resultados_tfidf/datos_1_a_600/resultados_tfidf_completo_svd95pct` y
+`resultados_tfidf/datos_1_a_600/resultados_tfidf_caracteres4_completo_svd95pct` contienen nuevas representaciones
 para comparar con los TF-IDF originales y con SVD de 100 dimensiones. `95pct`
 indica el objetivo de varianza, no el número de dimensiones. Conservan los mismos
 598 usuarios y su orden, con normalización L2 y los cuatro archivos habituales:
@@ -264,8 +269,8 @@ indica el objetivo de varianza, no el número de dimensiones. Conservan los mism
 Para regenerarlas con estos mismos TF-IDF y la semilla 42:
 
 ```powershell
-.\.venv\Scripts\python.exe -m vectorizacion.svd --entrada resultados_tfidf_completo --dimensiones 495 --salida resultados_tfidf_completo_svd95pct
-.\.venv\Scripts\python.exe -m vectorizacion.svd --entrada resultados_tfidf_caracteres4_completo --dimensiones 479 --salida resultados_tfidf_caracteres4_completo_svd95pct
+.\.venv\Scripts\python.exe -m vectorizacion.svd --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_completo --dimensiones 495 --salida resultados_tfidf/datos_1_a_600/resultados_tfidf_completo_svd95pct
+.\.venv\Scripts\python.exe -m vectorizacion.svd --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_caracteres4_completo --dimensiones 479 --salida resultados_tfidf/datos_1_a_600/resultados_tfidf_caracteres4_completo_svd95pct
 ```
 
 Si las carpetas ya existen, usa otro nombre con `--salida`. Estos números de
@@ -278,8 +283,8 @@ dio 94,98 %, por lo que se aumentó a 495.
 Para comparar cada nueva representación con TF-IDF y SVD de 100 dimensiones:
 
 ```powershell
-.\.venv\Scripts\python.exe -m experimentos --entrada resultados_tfidf_completo --entrada resultados_tfidf_completo_svd100 --entrada resultados_tfidf_completo_svd95pct --salida resultados_experimentos_comparacion_palabras_95pct
-.\.venv\Scripts\python.exe -m experimentos --entrada resultados_tfidf_caracteres4_completo --entrada resultados_tfidf_caracteres4_completo_svd100 --entrada resultados_tfidf_caracteres4_completo_svd95pct --salida resultados_experimentos_comparacion_caracteres_95pct
+.\.venv\Scripts\python.exe -m experimentos --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_completo --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_completo_svd100 --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_completo_svd95pct --salida resultados_experimentos_comparacion_palabras_95pct
+.\.venv\Scripts\python.exe -m experimentos --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_caracteres4_completo --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_caracteres4_completo_svd100 --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_caracteres4_completo_svd95pct --salida resultados_experimentos_comparacion_caracteres_95pct
 ```
 
 Puedes añadir `--estabilidad 5` para incluir el submuestreo con vectores fijos.

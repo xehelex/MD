@@ -1,7 +1,6 @@
-"""Banco de pruebas: recorre la rejilla de configuraciones y mide cada partición.
+"""Banco de pruebas: recorre la configuraciones y mide cada partición.
 
-El árbol se construye UNA vez por combinación y se corta en todos los k. Lo
-caro es el árbol, no el corte.
+El árbol se construye una vez por combinación y se corta en todos los k. 
 """
 from __future__ import annotations
 
@@ -21,8 +20,8 @@ from .eleccion_k import inconsistencia
 def equilibrio(etiquetas: np.ndarray) -> float:
     """Entropía de los tamaños de grupo, normalizada entre 0 y 1.
 
-    1 = todos los grupos iguales, cerca de 0 = uno se lo come todo. Va al lado
-    del silhouette porque el silhouette solo no distingue 477/1/1/1 de nada.
+    Pre:  etiquetas es un vector de enteros.
+    Post: valor en [0, 1]. 1 = todos los grupos iguales, cerca de 0 = uno se lo come todo. 
     """
     tamanos = np.array(sorted(collections.Counter(np.asarray(etiquetas).tolist()).values()), dtype=float)
     if len(tamanos) < 2:
@@ -34,7 +33,10 @@ def equilibrio(etiquetas: np.ndarray) -> float:
 def grupos_utiles(etiquetas: np.ndarray, minimo: int = 10) -> tuple[int, int]:
     """Grupos que superan el mínimo, e instancias que quedan fuera.
 
-    Un 477/1/1/1 son cuatro grupos sobre el papel y uno de verdad.
+
+    Pre:  minimo >= 1.
+    Post: Cuantos grupos llegan al minimo, cuantas instancias quedan fuera.
+          Las dos cifras son >= 0 y las sueltas no pasan de len(etiquetas).
     """
     cuenta = collections.Counter(np.asarray(etiquetas).tolist())
     utiles = [n for n in cuenta.values() if n >= minimo]
@@ -46,10 +48,11 @@ def estabilidad_por_k(X, resultado, enlace: str, distancia: str, p: float, ks,
     """ARI medio entre la partición original y la de un reajuste al 80%.
 
     El árbol de cada remuestreo se construye una vez y se compara en todos los
-    k; si no, esto no entra en la rejilla ni de broma.
+    k si no, esto no entra en la rejilla ni de broma.
 
-    Ojo: una partición degenerada sale estabilísima, porque meter a todos en un
-    grupo se reproduce siempre. Mirar junto al equilibrio, nunca sola.
+    Pre:  Resultado es el arbol de X; 0 < fraccion <= 1; los k de ks valen
+          para X.
+    Post: {k: ARI medio}. Un k que no cabe en el submuestreo sale como nan.
     """
     rng = np.random.default_rng(semilla)
     n = X.shape[0]
@@ -69,7 +72,12 @@ def estabilidad_por_k(X, resultado, enlace: str, distancia: str, p: float, ks,
 
 
 def evaluar_corte(resultado, etiquetas: np.ndarray, minimo: int) -> dict:
-    """Métricas de una partición concreta."""
+    """Métricas de una partición concreta.
+
+    Pre:  etiquetas son las de cortar `resultado`, sin -1.
+    Post: dict con silhouette, equilibrio, mayor_pct, grupos_utiles,
+          instancias_sueltas y tamanos (los seis mayores, como texto).
+    """
     cuenta = collections.Counter(etiquetas.tolist())
     mayor = max(cuenta.values())
     utiles, sueltas = grupos_utiles(etiquetas, minimo)
@@ -87,13 +95,12 @@ def recorrer_rejilla(matrices: dict, combinaciones, ks, minimo: int = 10,
                      repeticiones: int = 0, remuestreos: int = 0) -> list[dict]:
     """Ejecuta la rejilla completa y devuelve una fila por (matriz, enlace, k).
 
-    `matrices` es {nombre: X}, `combinaciones` una lista de (enlace, distancia, p).
-    `repeticiones` añade la estabilidad (submuestreo al 80%) y `remuestreos` el
-    bootstrap. Las dos multiplican el tiempo por su número.
+    Pre:  todas las matrices tienen los mismos usuarios en el mismo orden;
+          cada combinacion es (enlace, distancia, p) admitida por el algoritmo.
+    Post: una fila por (matriz, combinacion, k) con k < n. Las columnas de
+          estabilidad y bootstrap salen nan si no se pidieron.
     """
-    # Aqui dentro y no arriba: bootstrap tiene su propio __main__, y si el
-    # paquete lo carga al importar, python -m experimentos.bootstrap avisa de
-    # que se esta ejecutando dos veces.
+
     from .bootstrap import bootstrap_por_k
 
     filas = []
@@ -135,7 +142,9 @@ def recorrer_rejilla(matrices: dict, combinaciones, ks, minimo: int = 10,
 def correlacion_silhouette_equilibrio(filas: list[dict]) -> float:
     """Pearson entre silhouette y equilibrio sobre toda la rejilla.
 
-    Si sale muy negativa, elegir modelo por silhouette es elegir al revés.
+    Pre:  las filas vienen de recorrer_rejilla.
+    Post: correlacion en [-1, 1], o nan si hay menos de 3 filas utiles o una
+          de las dos columnas es constante.
     """
     s = np.array([f["silhouette"] for f in filas], dtype=float)
     e = np.array([f["equilibrio"] for f in filas], dtype=float)

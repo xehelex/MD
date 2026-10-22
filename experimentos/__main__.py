@@ -28,6 +28,14 @@ COLUMNAS = ["matriz", "enlace", "distancia", "k", "silhouette", "equilibrio",
 
 
 def main(argv=None):
+    """Lee las matrices, recorre la rejilla y deja CSV, resumen e informe.
+
+    Pre:  2 <= k-min <= k-max y cada --entrada es una carpeta con su matriz y
+          su usuarios.json. Todas tienen que traer los mismos usuarios en el
+          mismo orden.
+    Post: escribe rejilla.csv, resumen.json e informe.html en --salida y
+          resume por pantalla. Con --comprobar-entradas solo valida y sale.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--entrada", type=Path, action="append", required=True,
                         help="Carpeta con X.npz (dispersa) o X.npy (densa), y usuarios.json. Repetir para comparar varias.")

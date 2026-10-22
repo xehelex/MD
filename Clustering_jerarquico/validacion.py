@@ -22,7 +22,12 @@ from .metricas import adjusted_rand_index
 
 
 def _coinciden(etiquetas_a, etiquetas_b) -> bool:
-    """Dos particiones son la misma aunque los clusters estén numerados distinto."""
+    """Dos particiones son la misma aunque los clusters estén numerados distinto.
+
+    Pre:  los dos vectores tienen la misma longitud.
+    Post: True si el ARI pasa de 0,999, o sea si agrupan igual aunque las
+          etiquetas no se llamen igual.
+    """
     return adjusted_rand_index(etiquetas_a, etiquetas_b) > 0.999
 
 
@@ -31,6 +36,9 @@ def etiquetas_desde_scipy(Z: np.ndarray, n: int, k: int) -> np.ndarray:
 
     fcluster con 'maxclust' no sirve aquí: corta por umbral y con fusiones
     empatadas no devuelve exactamente k grupos.
+
+    Pre:  Z es el linkage de scipy sobre n filas y 1 <= k <= n.
+    Post: vector de n etiquetas con exactamente k valores distintos.
     """
     grupos = {i: {i} for i in range(n)}
     siguiente = n
@@ -50,6 +58,12 @@ def contrastar_enlace(X, A, enlace: str, metodo_scipy: str, distancia: str) -> d
 
     Recorre k = 2 .. n-1 y no unos pocos valores: con cinco sueltos parecía
     que todo cuadraba y se nos escapaban diferencias.
+
+    Pre:  X y A son los mismos datos, dispersos y densos; metodo_scipy es el
+          enlace equivalente al nuestro.
+    Post: dict con los cortes revisados, las discrepancias reales, las que
+          solo son empates y el error maximo entre alturas. "ok" es True si
+          no hay ninguna discrepancia de verdad.
     """
     inicio = time.perf_counter()
     resultado = ClusteringJerarquico(enlace=enlace, distancia=distancia).fit(X)
@@ -88,7 +102,12 @@ def contrastar_enlace(X, A, enlace: str, metodo_scipy: str, distancia: str) -> d
 
 
 def contrastar_distancia(A, tipo: str, p: float, kwargs_scipy: dict) -> dict:
-    """Compara una matriz de distancias propia con la de scipy."""
+    """Compara una matriz de distancias propia con la de scipy.
+
+    Pre:  A es densa y kwargs_scipy pide a cdist la misma metrica que `tipo`.
+    Post: dict con el error maximo elemento a elemento. "ok" si baja de 1e-8,
+          que es ruido de coma flotante.
+    """
     propia = matriz_distancias(A, A, tipo, p)
     referencia = cdist(A, A, **kwargs_scipy)
     error = float(np.abs(propia - referencia).max())
@@ -104,6 +123,9 @@ def contrastar_rechazos() -> list[dict]:
     Sin normalizar da otro árbol (ARI ~0.22 contra ward euclídeo). No hay nada
     en el código que lo compruebe; de momento lo garantiza que todas las
     matrices del proyecto salen normalizadas.
+
+    Pre:  ninguna; los casos van escritos aqui dentro.
+    Post: una fila por caso diciendo si se rechazo y si eso era lo esperado.
     """
     casos = [
         ("ward", "cosine", 2.0, False),
@@ -128,7 +150,12 @@ def contrastar_rechazos() -> list[dict]:
 
 
 def medir_coste(A, tamanos) -> list[dict]:
-    """Tiempo de construir la matriz de distancias según crece el número de filas."""
+    """Tiempo de construir la matriz de distancias según crece el número de filas.
+
+    Pre:  A tiene al menos max(tamanos) filas.
+    Post: una fila por tamaño con los segundos de la euclidea y la manhattan.
+          Sirve para ver el crecimiento cuadratico, no para comparar maquinas.
+    """
     filas = []
     for n in tamanos:
         muestra = A[:n]
@@ -144,7 +171,11 @@ def medir_coste(A, tamanos) -> list[dict]:
 # region Informe HTML
 
 def _svg_coste(coste: list[dict]) -> str:
-    """Gráfica de tiempo frente a n, en escala logarítmica, sin dependencias."""
+    """Gráfica de tiempo frente a n, en escala logarítmica, sin dependencias.
+
+    Pre:  coste viene de medir_coste, con al menos dos tamaños y tiempos > 0.
+    Post: el SVG como texto, listo para incrustar en el HTML.
+    """
     ancho, alto, margen = 560, 300, 52
     ns = [f["n"] for f in coste]
     series = {"manhattan": [f["manhattan"] for f in coste],
@@ -184,10 +215,16 @@ def _svg_coste(coste: list[dict]) -> str:
 
 
 def _marca(ok: bool) -> str:
+    """Pre: ok es booleano.  Post: el span verde o rojo del informe."""
     return f'<span class="marca {"si" if ok else "no"}">{"correcto" if ok else "fallo"}</span>'
 
 
 def construir_html(enlaces, distancias, rechazos, coste, n, d) -> str:
+    """Informe completo con las cuatro tablas y la grafica de coste.
+
+    Pre:  las listas vienen de las funciones contrastar_* y medir_coste.
+    Post: el HTML como texto. La cabecera dice si pasa todo o no.
+    """
     todo_ok = (all(e["ok"] for e in enlaces) and all(x["ok"] for x in distancias)
                and all(r["ok"] for r in rechazos))
 
@@ -313,6 +350,12 @@ así que con cualquier otra métrica no debe dejarse construir.</p>
 
 
 def main():
+    """Contrasta la implementacion contra scipy y deja el informe en disco.
+
+    Pre:  existe la matriz TF-IDF de 598 usuarios que se usa de referencia.
+    Post: escribe validacion.html, resume por pantalla y dice "Todo correcto"
+          si no hay ni una discrepancia.
+    """
     raiz = Path(__file__).parent.parent
     X = load_npz(raiz / "resultados_tfidf" / "datos_1_a_600" / "resultados_tfidf_completo" / "X.npz").tocsr()
     A = X.toarray()
@@ -320,7 +363,7 @@ def main():
 
     enlaces = [
         contrastar_enlace(X, A, "ward", "ward", "euclidean"),
-        # El TF-IDF de sklearn sale normalizado L2, asi que aqui nuestro
+        # El TF-IDF de sklearn sale normalizado, asi que aqui nuestro
         # ward+cosine tiene que dar el MISMO arbol que el ward euclideo de
         # scipy. Si algun dia entra una matriz sin normalizar, esta fila es la
         # que se cae.

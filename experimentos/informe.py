@@ -5,12 +5,23 @@ from datetime import datetime
 
 
 def _barra(valor: float, color: str) -> str:
+    """Barra proporcional al valor, con el numero al lado.
+
+    Pre:  color es un color CSS valido.
+    Post: el HTML de la barra. El ancho se recorta a [0, 1], asi que un
+          silhouette negativo sale vacio en vez de desbordar la celda.
+    """
     ancho = max(0.0, min(1.0, valor)) * 100
     return (f'<div class="barra"><div class="relleno" style="width:{ancho:.0f}%;background:{color}"></div>'
             f'<span>{valor:.3f}</span></div>')
 
 
 def _color(equilibrio: float) -> str:
+    """Verde, ambar o rojo segun lo repartida que este la particion.
+
+    Pre:  equilibrio en [0, 1].
+    Post: nombre de una variable CSS del informe.
+    """
     if equilibrio >= 0.6:
         return "var(--bien)"
     if equilibrio >= 0.3:
@@ -19,6 +30,11 @@ def _color(equilibrio: float) -> str:
 
 
 def _veredicto(equilibrio: float, utiles: int) -> tuple[str, str]:
+    """Etiqueta de la fila mirando el reparto y los grupos con masa.
+
+    Pre:  equilibrio en [0, 1] y utiles >= 0.
+    Post: (texto, clase CSS) para pintar la celda.
+    """
     if equilibrio < 0.15 or utiles <= 1:
         return "no reparte", "mal"
     if equilibrio < 0.5 or utiles < 4:
@@ -27,6 +43,11 @@ def _veredicto(equilibrio: float, utiles: int) -> tuple[str, str]:
 
 
 def construir_html(filas: list[dict], correlacion: float) -> str:
+    """Pagina entera del informe, sin dependencias externas.
+
+    Pre:  las filas vienen de recorrer_rejilla; correlacion puede ser nan.
+    Post: el HTML como texto, listo para escribir en disco.
+    """
     matrices = sorted({f["matriz"] for f in filas})
     bloques = []
 

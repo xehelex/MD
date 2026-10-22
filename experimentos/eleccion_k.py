@@ -13,6 +13,10 @@ def inconsistencia(resultado, profundidad: int = 3) -> np.ndarray:
 
     El salto en bruto no vale: en la base del árbol son enormes y se lleva el
     premio un k absurdo. Normalizado contra el vecindario, ya no pasa.
+
+    Pre:  resultado viene de fit(); profundidad >= 1.
+    Post: array con un valor por fusion, en el mismo orden que merges. Donde
+          el vecindario no tiene dispersion devuelve 0, no infinito.
     """
     n = resultado.n_instancias
     merges = resultado.merges
@@ -39,6 +43,10 @@ def sugerir_k(resultado, k_min: int = 2, k_max: int = 30,
               profundidad: int = 3, cuantos: int = 3) -> list[tuple[int, float]]:
     """Candidatos a k, de mejor a peor, mirando la fusión que uniría k con k-1.
 
+    Pre:  2 <= k_min <= k_max < n; cuantos >= 1.
+    Post: hasta `cuantos` pares (k, puntuacion) ordenados de mayor a menor,
+          todos con k en el rango pedido.
+
     Da candidatos, no una respuesta: con datos sintéticos de k conocido el bueno
     sale entre los dos primeros, pero no siempre el primero.
     """
@@ -56,6 +64,9 @@ def k_max_recomendado(n: int) -> int:
     """Regla de andar por casa para acotar la busqueda: sqrt(n/2).
 
     Con 480 usuarios da 15. Evita barrer cientos de k que nadie va a usar.
+
+    Pre:  n >= 1.
+    Post: entero >= 2, aunque n sea diminuto.
     """
     return max(2, int(np.sqrt(n / 2)))
 
@@ -65,6 +76,10 @@ def buscar_k_biseccion(criterio, k_min: int = 2, k_max: int = 15) -> tuple[int, 
 
     Compara los extremos y se queda con la mitad del que gana: O(log k_max) en
     vez de O(k_max). Devuelve (mejor_k, puntuacion, evaluaciones).
+
+    Pre:  2 <= k_min < k_max y criterio sabe puntuar cualquier k del rango.
+    Post: (mejor_k, su puntuacion, cuantos k se evaluaron), con mejor_k en
+          [k_min, k_max] y bastantes menos evaluaciones que el barrido.
 
     Ojo: supone un unico maximo. Con varios picos puede quedarse en el que no
     es, y nuestro silhouette no es unimodal. Para eso esta buscar_k_por_bloques.
@@ -100,6 +115,10 @@ def buscar_k_por_bloques(criterio, k_min: int = 2, k_max: int = 15,
     Prueba unos pocos k por todo el rango, mira cuales destacan sobre sus
     vecinos y afina alrededor de cada uno. Asi no pierde un segundo maximo por
     haber descartado media tabla al principio. Mas caro, pero seguro.
+
+    Pre:  2 <= k_min < k_max y bloques >= 2.
+    Post: (mejor_k, su puntuacion, cuantos k se evaluaron). Cuesta mas que la
+          biseccion y sigue costando menos que barrer el rango entero.
     """
     if not 2 <= k_min < k_max:
         raise ValueError("Tiene que cumplirse 2 <= k_min < k_max.")
@@ -139,8 +158,12 @@ def salto_mayor(resultado, k_min: int = 2, k_max: int = 30,
                 cuantos: int = 3) -> list[tuple[int, float]]:
     """El k donde más crece la altura al fusionar.
 
-    Más fácil de explicar que la inconsistencia, pero se deja engañar por la
-    base del árbol: hay que acotar el rango sí o sí.
+    Arbol de corte clásico: fusionar k con k-1 es la fusión n-k. La altura de esa
+    fusión menos la de la anterior es el salto. Los mayores saltos son candidatos a
+    k.
+
+    Pre:  2 <= k_min <= k_max < n-1, que es donde hay dos alturas que restar.
+    Post: hasta `cuantos` pares (k, salto) de mayor a menor, con salto >= 0.
     """
     n = resultado.n_instancias
     if not 2 <= k_min <= k_max < n - 1:

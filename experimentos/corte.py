@@ -13,7 +13,12 @@ import numpy as np
 
 
 def _arbol(resultado):
-    """Reconstruye hijos, miembros y altura de cada nodo del dendrograma."""
+    """Reconstruye hijos, miembros y altura de cada nodo del dendrograma.
+
+    Pre:  resultado viene de fit(); sus merges estan en orden de fusion.
+    Post: (hijos, miembros, altura) indexados por nodo. Las hojas 0..n-1 no
+          aparecen en hijos y tienen altura 0.
+    """
     n = resultado.n_instancias
     hijos, miembros, altura = {}, {i: [i] for i in range(n)}, {i: 0.0 for i in range(n)}
 
@@ -30,10 +35,12 @@ def _arbol(resultado):
 def cortar_por_tamano(resultado, minimo: int = 10, max_grupos: int | None = None):
     """Devuelve (etiquetas, informe) exigiendo grupos de al menos `minimo`.
 
-    Los apartados llevan etiqueta -1. `minimo=1` reproduce el corte clásico.
+    Los apartados se marcan con -1. Si se da max_grupos, no se crean mas de esos.
 
-    Ojo con el umbral: subirlo borra los grupos pequeños, y aquí los pequeños
-    son los interesantes. Con 15 se perdía el de ludopatía.
+    Pre:  minimo >= 1 y max_grupos >= 1 si se da.
+    Post: (etiquetas, informe). etiquetas tiene n enteros: 0..g-1 para los
+          grupos y -1 para los apartados. Todo grupo con etiqueta >= 0 tiene
+          al menos `minimo` miembros, y g <= max_grupos si se pidio.
     """
     if minimo < 1:
         raise ValueError("El tamaño mínimo tiene que ser al menos 1.")
@@ -98,6 +105,8 @@ def cortar_por_tamano(resultado, minimo: int = 10, max_grupos: int | None = None
 def k_equivalente(resultado, etiquetas: np.ndarray) -> int:
     """Cuántos grupos pediría el corte clásico para aislar los mismos atípicos.
 
-    Si salen 9 y aquí 46, el clásico habría gastado 37 en gente suelta.
+    Pre:  etiquetas sale de cortar_por_tamano, con -1 en los apartados.
+    Post: numero de grupos mas numero de apartados, que es el k que haria
+          falta pedirle al corte clasico para separarlos uno a uno.
     """
     return int(len(np.unique(etiquetas[etiquetas >= 0])) + (etiquetas == -1).sum())

@@ -112,7 +112,7 @@ def correlacion_cofenetica(resultado) -> float:
 
 
 def davies_bouldin(X, etiquetas) -> float:
-    """Índice de Davies-Bouldin: media, para cada cluster, del peor (S_i + S_j) / d(c_i, c_j).
+    """Índice de Davies-Bouldin: media, para cada cluster.
 
     S_i es la distancia media de los puntos del cluster i a su centroide c_i (euclídea).
 
@@ -162,8 +162,7 @@ def adjusted_rand_index(reparto_a, reparto_b) -> float:
     """Índice de Rand ajustado (ARI): cuánto se parecen dos repartos en grupos de los mismos usuarios.
 
     Mira cada par de usuarios y comprueba si los dos repartos coinciden en ponerlos juntos o separados,
-    descontando lo que coincidirían por azar. No importa el número que tenga cada grupo, solo quién va con quién.
-    Lo usamos para la estabilidad: reparto con todos los usuarios frente a reparto rehecho con el 80 %.
+    descontando lo que coincidirían por azar.
 
     Pre:  los dos repartos tienen la misma longitud y la posición i es el mismo usuario en los dos.
     Post: 1 si son iguales, alrededor de 0 si solo coinciden por azar (puede ser negativo).

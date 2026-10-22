@@ -10,6 +10,13 @@ from .nueva_instancia import Clasificador, es_densa
 
 
 def main(argv=None):
+    """Consulta un texto contra el modelo y lo escribe por pantalla.
+
+    Pre:  --entrada es la carpeta con la que se entreno --modelo, y el texto
+          llega por argumento o por teclado.
+    Post: imprime el cluster y los vecinos mas parecidos, y guarda el PNG si
+          se pidio --grafico. Devuelve 1 si el texto no se puede procesar.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("texto", nargs="?", help="Texto a consultar. Sin esto, lo pide por teclado.")
     parser.add_argument("--entrada", type=Path, required=True,

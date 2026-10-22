@@ -3,9 +3,6 @@
 Se remuestrea con reemplazo, se rehace el arbol y se compara con la particion
 original. Si el ARI se mantiene alto vuelta tras vuelta, el resultado es solido.
 
-Ojo con single: los usuarios repetidos quedan a distancia 0 entre si y le
-regalan puentes, asi que su estabilidad aqui sale inflada.
-
 Desde consola: python -m experimentos.bootstrap --help
 """
 from __future__ import annotations
@@ -32,10 +29,15 @@ class ResultadoBootstrap:
 
     @property
     def media(self) -> float:
+        """Pre: hay al menos un ARI.  Post: su media, en [-1, 1]."""
         return float(self.aris.mean())
 
     def intervalo(self, confianza: float = 0.95) -> tuple[float, float]:
-        """Entre que valores cae el ARI. Por percentiles, sin suponer normalidad."""
+        """Entre que valores cae el ARI. Por percentiles, sin suponer normalidad.
+
+        Pre:  0 < confianza < 1.
+        Post: (bajo, alto) con bajo <= alto, los dos dentro del rango de aris.
+        """
         cola = (1 - confianza) / 2 * 100
         return float(np.percentile(self.aris, cola)), float(np.percentile(self.aris, 100 - cola))
 
@@ -43,12 +45,16 @@ class ResultadoBootstrap:
         """Lo que mide el intervalo. Estrecho = da siempre la misma respuesta.
 
         Mas informativo que la media: una particion degenerada saca ARI alto
-        porque es trivial de repetir, pero no por eso es buena.
+        porque es trivial de repetir, pero el ancho es enorme. Un corte solido
+
+        Pre:  0 < confianza < 1.
+        Post: valor >= 0. Cuanto mas pequeno, mas repetible es el resultado.
         """
         bajo, alto = self.intervalo(confianza)
         return alto - bajo
 
     def resumen(self) -> str:
+        """Pre: el bootstrap ya corrio.  Post: una linea con media, intervalo y vueltas."""
         bajo, alto = self.intervalo()
         return (f"{self.enlace}/{self.distancia}, k={self.k}: "
                 f"ARI {self.media:.3f} [{bajo:.3f}, {alto:.3f}] "
@@ -56,11 +62,12 @@ class ResultadoBootstrap:
 
 
 def _remuestreo(azar, n: int):
-    """Una vuelta: indices con reemplazo, los distintos, y donde mirar cada uno.
+    """Una vuelta: indices con reemplazo, los distintos, y donde mirar cada uno..
 
-    De los repetidos nos quedamos con su primera aparicion, que si no no se
-    puede comparar uno a uno contra la referencia. No depende de k, asi que se
-    calcula una vez por vuelta.
+    Pre:  n >= 1.
+    Post: (indices, distintos, orden) con len(indices) == n. distintos va
+          ordenado y sin repetir, y orden dice en que fila de indices mirar
+          a cada uno. Quedan fuera un 37% de media.
     """
     indices = azar.integers(0, n, size=n)          # con reemplazo: ~63% de unicos
     distintos = np.unique(indices)
@@ -73,6 +80,10 @@ def bootstrap(X, enlace: str, distancia: str, k: int, repeticiones: int = 50,
     """Remuestrea con reemplazo y mide cuanto se parece cada particion a la original.
 
     Mas repeticiones afinan el intervalo: 30 para mirar, 100 para la memoria.
+
+    Pre:  2 <= k < n, repeticiones >= 2 y (enlace, distancia) admitidos.
+    Post: ResultadoBootstrap con un ARI por repeticion, todos en [-1, 1].
+          Con la misma semilla sale siempre lo mismo.
     """
     n = X.shape[0]
     if repeticiones < 2:
@@ -97,12 +108,13 @@ def bootstrap_por_k(X, resultado, enlace: str, distancia: str, p: float, ks,
                     repeticiones: int = 0, semilla: int = 42) -> dict:
     """Lo mismo que bootstrap() pero para todos los k de una pasada.
 
-    Cada remuestreo construye un arbol y se corta en todos los k; si no, esto
-    no entra en la rejilla. Devuelve {k: (media, ancho)}.
+    Cada remuestreo construye un arbol y se corta en todos los k.
+    Devuelve {k: (media, ancho)}.
 
-    No es lo mismo que estabilidad_por_k: ese submuestrea al 80% SIN reemplazo y
-    responde a "y si tuviera menos usuarios". Este tiene el tamaño completo y
-    responde a "y si me hubieran tocado otros".
+
+    Pre:  resultado es el arbol de X y todos los k de ks cumplen 2 <= k < n.
+    Post: {k: (media, ancho)}. Con repeticiones = 0 todo sale nan. Para un k
+          suelto da exactamente lo mismo que bootstrap().
     """
     azar = np.random.default_rng(semilla)
     n = X.shape[0]
@@ -133,7 +145,12 @@ class EstabilidadGrupo:
     jaccard: float
 
     def veredicto(self) -> str:
-        """Umbrales de Hennig (2007), los de referencia para esto."""
+        """Umbrales de Hennig (2007), los de referencia para esto.
+
+        Pre:  jaccard calculado, no nan.
+        Post: "solido" (>=0.85), "aceptable" (>=0.75), "dudoso" (>=0.60) o
+              "no se sostiene".
+        """
         if self.jaccard >= 0.85:
             return "solido"
         if self.jaccard >= 0.75:
@@ -149,12 +166,11 @@ def estabilidad_por_grupo(X, resultado, enlace: str, distancia: str, k: int,
     """Cuanto reaparece cada grupo por separado, en vez de la particion entera.
 
     Por cada remuestreo se busca el grupo mas parecido a cada original y se mide
-    el Jaccard (comunes / totales). Un grupo que reaparece casi igual vuelta
-    tras vuelta es un grupo de verdad; uno que se deshace venia de los usuarios
-    concretos que nos tocaron.
+    el Jaccard (comunes / totales). 
 
-    Sirve para lo que el ARI global no puede: saber de QUE grupos fiarse al
-    mirar los temas, porque la media tapa que unos aguanten y otros no.
+    Pre:  2 <= k < n y repeticiones >= 2.
+    Post: una EstabilidadGrupo por cada uno de los k grupos, con jaccard en
+          [0, 1]. Un grupo que no sale en ninguna vuelta da nan.
     """
     n = X.shape[0]
     if repeticiones < 2:
@@ -171,8 +187,7 @@ def estabilidad_por_grupo(X, resultado, enlace: str, distancia: str, k: int,
         sub = ClusteringJerarquico(enlace=enlace, distancia=distancia, p=p).fit(X[indices])
         antes, ahora = referencia[distintos], sub.etiquetas(k)[orden]
 
-        # Tabla de contingencia: usuarios que comparte cada par de grupos. De
-        # ahi sale el Jaccard de golpe, sin recorrer pares a mano.
+        # Tabla de contingencia
         comunes = np.zeros((k, k))
         np.add.at(comunes, (antes, ahora), 1.0)
         totales = comunes.sum(1, keepdims=True) + comunes.sum(0, keepdims=True) - comunes
@@ -191,6 +206,12 @@ ENLACES = ("single", "average", "complete", "ward")
 
 
 def main(argv=None):
+    """Compara la estabilidad de los enlaces por consola.
+
+    Pre:  --entrada tiene la matriz y 2 <= --k < n.
+    Post: imprime una tabla con ARI, intervalo, ancho y tamaños por enlace, o
+          el Jaccard de cada grupo con --por-grupo.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--entrada", type=Path, required=True,
                         help="Carpeta con X.npz o X.npy y usuarios.json.")
@@ -238,6 +259,7 @@ def main(argv=None):
         print("El tamaño no predice la estabilidad: un grupo chico y apretado aguanta\n"
               "mejor que uno grande y difuso. Dice de que grupos puedes hablar con\n"
               "fuerza al describir los temas, no si el clustering esta bien.\n")
+
         return 0
 
     print(f"\n{'enlace':<9}{'ARI':>7}{'intervalo 95%':>18}{'ancho':>8}  tamanos")

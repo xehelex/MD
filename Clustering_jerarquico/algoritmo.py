@@ -193,7 +193,7 @@ class ModeloEntrenado:
 
         El jerárquico no predice de por sí, así que cada fila va al cluster al que menos le costaría
         unirse según el enlace: single = distancia mínima, complete = máxima, average = media y
-        ward = lo que aumenta la suma de cuadrados, n_c/(n_c+1)·||x - centroide_c||².
+        ward = lo que aumenta la suma de cuadrados.
         Es una aproximación: el árbol no se recalcula.
 
         Pre:  X_nuevo (una fila o una matriz) tiene los mismos atributos que el entrenamiento.

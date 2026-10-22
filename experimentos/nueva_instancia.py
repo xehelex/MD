@@ -40,6 +40,9 @@ class Resultado:
         Un vector de usuario es la media de cientos de posts, asi que una frase
         corta se parece mas al ruido general que a un tema. En TF-IDF el minimo
         ya lo pone el preprocesador.
+
+        Pre:  ninguna; en TF-IDF (ruta vacia) siempre devuelve "".
+        Post: el motivo de desconfiar, o "" si no hay ninguno.
         """
         if not self.ruta:
             return ""
@@ -55,8 +58,11 @@ class Resultado:
 def resolver_cadena(carpeta: Path) -> tuple[Path, Path | None]:
     """Devuelve (carpeta con el vectorizador, svd.joblib si lo hay).
 
-    Una carpeta SVD no tiene vectorizador: su resumen.json apunta a la TF-IDF
-    de la que salio.
+    Una carpeta SVD no tiene vectorizador: el resumen.json dice de donde viene. Si no hay svd.joblib, devuelve None.
+
+    Pre:  la carpeta existe y, si lleva svd.joblib, su resumen.json dice de
+          donde viene.
+    Post: (carpeta con vectorizador.joblib, ruta del svd o None).
     """
     carpeta = Path(carpeta)
     svd = carpeta / "svd.joblib"
@@ -74,14 +80,19 @@ def resolver_cadena(carpeta: Path) -> tuple[Path, Path | None]:
         raise ValueError(f"{carpeta} tiene svd.joblib pero su resumen.json no dice de donde viene.")
     origen = Path(origen)
     # El resumen guarda la ruta de cuando se generó; si las carpetas se han movido
-    # juntas (p. ej. a resultados_tfidf/datos_1_a_600), el TF-IDF es su vecina.
+    # hay que buscarla en la misma carpeta que la SVD.
     if not (origen / "vectorizador.joblib").is_file():
         origen = carpeta.parent / origen.name
     return origen, svd
 
 
 def es_densa(carpeta: Path) -> bool:
-    """Carpeta de la cadena Roberta: su config.json dice con que modelo se embebio."""
+    """Carpeta de la cadena Roberta: su config.json dice con que modelo se embebio.
+
+    Pre:  carpeta es una ruta, exista o no.
+    Post: True solo si hay config.json con model_name. Una carpeta TF-IDF da
+          False porque su resumen.json no lleva ese campo.
+    """
     config = Path(carpeta) / "config.json"
     return config.is_file() and "model_name" in json.loads(config.read_text(encoding="utf-8"))
 
@@ -89,8 +100,10 @@ def es_densa(carpeta: Path) -> bool:
 def embeddings_crudos(carpeta: Path) -> tuple[np.ndarray, list[str]]:
     """Los vectores de 1024 dimensiones de los que salio la reduccion.
 
-    El user_embeddings.npz de una carpeta PCA_umap_* ya viene reducido; los
-    crudos estan en su hermana sin_reduccion.
+    El user_embeddings.npz de una carpeta PCA_umap_* ya viene reducido.
+
+    Pre:  existe la hermana sin_reduccion con su user_embeddings.npz.
+    Post: (matriz (n, 1024), lista de n usuarios en el orden de las filas).
     """
     carpeta = Path(carpeta)
     base = carpeta if carpeta.name == "sin_reduccion" else carpeta.parent / "sin_reduccion"
@@ -107,8 +120,11 @@ def cargar_reductor(carpeta: Path):
     """El Pipeline escalado -> PCA -> UMAP, si este Python puede abrirlo.
 
     Lleva bytecode de numba dentro y solo corre con el Python que lo genero
-    (3.12); las demas versiones fallan al cargar o al transformar. Devuelve
-    (reductor, motivo) para poder decir por que se tira de los vecinos.
+    (3.12); las demas versiones fallan al cargar o al transformar.
+
+    Pre:  carpeta es una ruta, exista o no el reductor.
+    Post: (reductor, "") si se pudo abrir, (None, motivo) si no. Nunca lanza:
+          que falte o no abra es un caso previsto, no un error.
     """
     ruta = Path(carpeta) / "reductor.joblib"
     if not ruta.is_file():
@@ -132,17 +148,25 @@ class EmbebedorRoberta:
     """
 
     def __init__(self, model_name: str, max_length: int = 512):
+        """Carga el tokenizador y el modelo.
+
+        Pre:  model_name es un modelo de Hugging Face y max_length >= 1.
+        Post: embebedor listo. La primera vez descarga el modelo, que en
+              roberta-large son 1,4 GB.
+        """
         import transformers
 
         from vectorizacion_densa.roberta import RobertaPorUsuario
 
         # Calla el informe de pesos: roberta-large trae cabeza de lenguaje y
-        # aqui solo se usa el cuerpo, asi que las "UNEXPECTED" son normales.
+        # aqui solo se usa el cuerpo.
         transformers.logging.set_verbosity_error()
         # data_path no se usa: solo queremos el tokenizador y el modelo.
         self.roberta = RobertaPorUsuario(model_name=model_name, max_length=max_length)
 
     def __call__(self, texto: str) -> np.ndarray:
+        """Pre: texto no vacio.  Post: vector (1, d). Lanza ValueError si la
+        limpieza lo deja sin nada (un texto que solo es un enlace)."""
         from tqdm import tqdm
 
         limpio = self.roberta.clean_text(texto)
@@ -156,7 +180,14 @@ class Clasificador:
     """Une modelo, vectorizador y textos para responder sobre un texto nuevo."""
 
     def __init__(self, modelo, carpeta_representacion, csv_textos=None, preprocesador=None):
-        """carpeta_representacion tiene que ser la misma con la que se entreno el modelo."""
+        """carpeta_representacion tiene que ser la misma con la que se entreno el modelo.
+
+        Pre:  la carpeta tiene usuarios.json y, segun el caso, vectorizador
+              o config.json de Roberta. En TF-IDF hace falta preprocesador.
+        Post: clasificador listo para consultar. Lanza ValueError si el modelo
+              no cuadra con la representacion, en numero de usuarios o de
+              dimensiones.
+        """
         self.modelo = modelo
         carpeta = Path(carpeta_representacion)
         self.densa = es_densa(carpeta)
@@ -199,7 +230,11 @@ class Clasificador:
 
     @staticmethod
     def _cargar_textos(ruta_csv) -> dict[str, str]:
-        """Texto de cada usuario, recortado, para enseñar a los vecinos."""
+        """Texto de cada usuario, recortado, para enseñar a los vecinos.
+
+        Pre:  el CSV tiene subject_id y una columna text o text_Clustering.
+        Post: {usuario: sus textos unidos, hasta 2000 caracteres}.
+        """
         import pandas as pd
 
         df = pd.read_csv(ruta_csv, dtype={"subject_id": str}, keep_default_na=False)
@@ -213,6 +248,9 @@ class Clasificador:
         Casi siempre es min_tokens: las palabras vacias se llevan medio texto y
         lo que queda no llega al minimo. El preprocesador solo devuelve None, asi
         que hay que rehacer el conteo para saberlo.
+
+        Pre:  hay preprocesador, o sea que venimos de la rama TF-IDF.
+        Post: frase explicando por que no quedan tokens.
         """
         prep = self.preprocesador
         crudo = [t for t in texto.split() if t.strip()]
@@ -231,9 +269,12 @@ class Clasificador:
     def vectorizar(self, texto: str):
         """Texto crudo -> vector en el mismo espacio que el entrenamiento.
 
-        Con la representacion densa el espacio es el de Roberta (1024), no el
-        del modelo (15 tras UMAP): la asignacion se hace por vecinos, no con
-        modelo.predecir.
+        Con la representacion densa el espacio es el de Roberta (1024), 
+        la asignacion se hace por vecinos, no con modelo.predecir.
+
+        Pre:  texto no vacio.
+        Post: (vector (1, d), tokens). Lanza ValueError si el texto se queda
+              sin nada que vectorizar.
         """
         if self.densa:
             # Roberta quiere el texto natural: al entrenar tampoco se lematizo.
@@ -260,6 +301,9 @@ class Clasificador:
 
         PCA y no t-SNE: t-SNE no sabe proyectar puntos nuevos, habria que rehacer
         la nube entera en cada consulta y el mapa cambiaria de forma.
+
+        Pre:  el modelo lleva su X de entrenamiento.
+        Post: (pca ajustado, coords (n, 2)). Se calcula una vez y se reutiliza.
         """
         if not hasattr(self, "_pca"):
             from sklearn.decomposition import PCA
@@ -272,10 +316,8 @@ class Clasificador:
     def grafico(self, resultado: "Resultado", ruta) -> Path:
         """Guarda un PNG con la nube de usuarios proyectada a 2D por PCA.
 
-        La posicion en el papel enganna: de 100 dimensiones a 2 se pierde tanto
-        que dos puntos pegados pueden estar lejisimos de verdad. Por eso la
-        distancia real no va en la posicion sino en el color, y los vecinos se
-        unen con una linea al texto.
+        Pre:  resultado viene de consultar() con este mismo clasificador.
+        Post: el PNG escrito, y su ruta. Crea las carpetas que falten.
         """
         import matplotlib
         matplotlib.use("Agg")
@@ -387,6 +429,9 @@ class Clasificador:
 
         Si el texto no puede llegar al espacio de UMAP, se mira a quien se
         parece en el de Roberta y hereda su grupo.
+
+        Pre:  estamos en la rama densa, o sea que hay embeddings cargados.
+        Post: (cluster, (votos a favor, votos contados)).
         """
         from Clustering_jerarquico.algoritmo import distancias
 
@@ -397,7 +442,12 @@ class Clasificador:
         return cluster, (a_favor, len(cercanos))
 
     def consultar(self, texto: str, vecinos: int = 5) -> Resultado:
-        """Asigna el texto a un cluster y busca los usuarios mas cercanos dentro."""
+        """Asigna el texto a un cluster y busca los usuarios mas cercanos dentro.
+
+        Pre:  texto no vacio y vecinos >= 1.
+        Post: Resultado con el cluster, hasta `vecinos` usuarios ordenados de
+              mas a menos parecido, y la ruta que se uso para asignarlo.
+        """
         X, tokens = self.vectorizar(texto)
 
         from Clustering_jerarquico.algoritmo import distancias

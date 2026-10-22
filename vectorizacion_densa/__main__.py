@@ -1,13 +1,17 @@
+"""Embeddings densos por usuario y reducción PCA + UMAP, con los parámetros de config.json.
+
+    python -m vectorizacion_densa [--conjunto datos_1_a_600] [--modelo roberta] [--sin-reduccion]
+
+Guarda en resultados_roberta/<conjunto>/<modelo>/:
+    sin_reduccion/                      un embedding por usuario, tal como sale del modelo
+    PCA_umap_<varianza>_<min_dist>/     los mismos, reducidos con PCA + UMAP
+Si sin_reduccion ya existe se reutiliza y solo se repite la reducción. Para recalcular los
+embeddings, borra esa carpeta.
+"""
 import argparse
 import json
-from pathlib import Path
-import numpy as np
-import sklearn
-import umap
-import joblib
 
-from .roberta import RobertaPorUsuario
-from .reduccionDim import construir_reductor
+from .reduccionDim import RAIZ, SIN_REDUCCION, cargar_config, carpeta_modelo, guardar, reducir
 
 MODELOS = {
     "roberta": dict(
@@ -25,109 +29,66 @@ MODELOS = {
 }
 
 
+def alinear(ids, X, n_posts, archivo_usuarios):
+    """Deja los usuarios en el orden de la representación TF-IDF del mismo conjunto.
+
+    Así el banco de pruebas puede comparar RoBERTa con TF-IDF: mismos usuarios y mismo orden.
+
+    Pre:  ids, X y n_posts tienen una fila por usuario; archivo_usuarios es un usuarios.json de TF-IDF.
+    Post: (ids, X, n_posts) filtrados y reordenados. Si el archivo no existe, se devuelven igual.
+    """
+    if not archivo_usuarios.is_file():
+        print(f"No existe {archivo_usuarios}: se guardan todos los usuarios, en su orden.")
+        return ids, X, n_posts
+    referencia = [u["usuario"] for u in json.loads(archivo_usuarios.read_text(encoding="utf-8"))]
+    posicion = {u: i for i, u in enumerate(ids)}
+    sobran = sorted(set(ids) - set(referencia))
+    faltan = [u for u in referencia if u not in posicion]
+    if sobran:
+        print(f"Se quitan {len(sobran)} usuarios que no están en TF-IDF: {', '.join(sobran)}")
+    if faltan:
+        print(f"Aviso: {len(faltan)} usuarios de TF-IDF no tienen embedding, el banco no podrá comparar.")
+    filas = [posicion[u] for u in referencia if u in posicion]
+    return ids[filas], X[filas], n_posts[filas]
+
+
+def calcular_embeddings(conjunto: str, modelo: str, config: dict):
+    """Calcula un embedding por usuario y lo guarda en sin_reduccion.
+
+    Pre:  existe el CSV del conjunto indicado en config.json y modelo está en MODELOS.
+    Post: carpeta sin_reduccion con X.npy, user_embeddings.npz, usuarios.json y config.json.
+    """
+    from .roberta import RobertaPorUsuario      # carga torch: solo cuando hace falta
+
+    rutas = config["conjuntos"][conjunto]
+    if not (RAIZ / rutas["datos"]).is_file():
+        raise SystemExit(f"No existe {rutas['datos']}. Genera antes el CSV con el preprocesador.")
+    vectorizador = RobertaPorUsuario(data_path=RAIZ / rutas["datos"], **MODELOS[modelo])
+    post_df, user_df = vectorizador.fit_transform()
+    print(f"Posts: {len(post_df)} | usuarios: {len(user_df)} | dimensiones: {vectorizador.user_embeddings.shape[1]}")
+
+    ids, X, n_posts = alinear(user_df["subject_id"].to_numpy().astype(str), vectorizador.user_embeddings,
+                              user_df["n_posts"].to_numpy(), RAIZ / rutas["usuarios"])
+    guardar(carpeta_modelo(conjunto, modelo) / SIN_REDUCCION, X, ids, n_posts,
+            {"conjunto": conjunto, "modelo": modelo, "reduccion": SIN_REDUCCION, "datos": rutas["datos"],
+             **MODELOS[modelo]})
+
+
 def main(argv=None):
-    parser = argparse.ArgumentParser(
-        description="Pipeline de extracción, agregación y reducción de embeddings de usuarios.")
-    parser.add_argument("--datos", type=Path, default=Path("output/data.csv"),
-                        help="Ruta al archivo CSV con los datos de entrada.")
-    parser.add_argument("--modelo", type=str, default="roberta",
-                        choices=list(MODELOS.keys()),
-                        help="Modelo a utilizar: roberta, all-roberta, multilingue")
-    parser.add_argument("--reduccion", type=str, default="sin_reduccion",
-                        help="Tipo de reducción: 'sin_reduccion' o formato 'PCA_umap_0.9_<min_dist>' (ej. PCA_umap_0.9_0.0)")
+    config = cargar_config()
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--conjunto", default=config["conjunto"], choices=list(config["conjuntos"]))
+    parser.add_argument("--modelo", default=config["modelo"], choices=list(MODELOS))
+    parser.add_argument("--sin-reduccion", action="store_true", help="Solo calcula los embeddings, sin PCA + UMAP.")
     args = parser.parse_args(argv)
 
-    if args.modelo not in MODELOS:
-        raise SystemExit(f"Modelo desconocido '{args.modelo}'. Opciones: {list(MODELOS)}")
-
-    config = MODELOS[args.modelo]
-
-    # Directorios base
-    modelo_dir = Path("resultados_roberta") / args.modelo
-    output_dir = modelo_dir / args.reduccion
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    sin_reduccion_dir = modelo_dir / "sin_reduccion"
-    base_user_npz = sin_reduccion_dir / "user_embeddings.npz"
-
-    # REUTILIZACIÓN INTELIGENTE: Si NO estamos en sin_reduccion y ya existe la base, la cargamos sin tocar el modelo
-    if args.reduccion != "sin_reduccion" and base_user_npz.exists():
-        print(f"-> Encontrados embeddings base de usuarios en '{sin_reduccion_dir}'. Reutilizando caché...")
-        data_base = np.load(base_user_npz)
-        X = data_base["embeddings"]
-        subject_ids = data_base["subject_id"]
-        n_posts = data_base["n_posts"]
-
-        print(f"Número de usuarios cargados desde caché: {len(subject_ids)}")
-        print(f"Shape original de X: {X.shape}")
-
+    base = carpeta_modelo(args.conjunto, args.modelo) / SIN_REDUCCION
+    if (base / "user_embeddings.npz").is_file():
+        print(f"Ya existen los embeddings en {base}: se reutilizan.")
     else:
-        # Si es sin_reduccion o no existe la base, ejecutamos el pipeline completo con RoBERTa
-        if args.reduccion != "sin_reduccion":
-            print(f"-> No se encontró caché en '{sin_reduccion_dir}'. Ejecutando extracción completa con el modelo...")
-
-        vectorizer = RobertaPorUsuario(data_path=args.datos, **config)
-        post_df, user_df = vectorizer.fit_transform()
-
-        X = vectorizer.user_embeddings
-        subject_ids = user_df["subject_id"].to_numpy().astype(str)
-        n_posts = user_df["n_posts"].to_numpy()
-
-        print("Número de posts procesados:", len(post_df))
-        print("Número de usuarios:", len(user_df))
-        print("Shape original de X:", X.shape)
-
-    # Aplicar reducción si corresponde
-    if args.reduccion == "sin_reduccion":
-        X_final = X
-        print("Pipeline sin reducción aplicada.")
-    elif args.reduccion.startswith("PCA_umap_"):
-        try:
-            min_dist = float(args.reduccion.split("_")[-1])
-        except ValueError:
-            min_dist = 0.0
-
-        print(f"Aplicando reducción PCA + UMAP con min_dist={min_dist}...")
-
-        reductor = construir_reductor(len(X), min_dist=min_dist)
-        X_final = reductor.fit_transform(X).astype(np.float32)
-
-        pca = reductor.named_steps["pca"]
-        print(f"PCA: {pca.n_components_} componentes ({pca.explained_variance_ratio_.sum():.1%} de la varianza)")
-        print("Shape reducida de X:", X_final.shape)
-
-        # Guardar artefactos de la reducción
-        joblib.dump(reductor, output_dir / "reductor.joblib")
-    else:
-        raise SystemExit(
-            f"Tipo de reducción desconocida: '{args.reduccion}'. Usa 'sin_reduccion' o formato 'PCA_umap_...'.")
-
-    # Guardado de ficheros esenciales de usuarios (sin rastro de post_embeddings)
-    np.save(output_dir / "X.npy", X_final)
-
-    np.savez(
-        output_dir / "user_embeddings.npz",
-        embeddings=X_final,
-        subject_id=subject_ids,
-        n_posts=n_posts,
-    )
-
-    usuarios_data = [{"usuario": str(u), "n_posts": int(n)} for u, n in zip(subject_ids, n_posts)]
-    (output_dir / "usuarios.json").write_text(
-        json.dumps(usuarios_data, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-
-    config_data = {
-        "modelo": args.modelo,
-        "reduccion": args.reduccion,
-        "datos": str(args.datos),
-        **config
-    }
-    (output_dir / "config.json").write_text(
-        json.dumps(config_data, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
-
-    print("Guardado correctamente en:", output_dir.resolve())
+        calcular_embeddings(args.conjunto, args.modelo, config)
+    if not args.sin_reduccion:
+        reducir(args.conjunto, args.modelo, config["reduccion"])
 
 
 if __name__ == "__main__":

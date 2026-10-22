@@ -1,0 +1,21 @@
+{
+  "conjunto": "datos_1_a_600",
+  "modelo": "roberta",
+  "reduccion": {
+    "varianza": 0.9,
+    "min_dist": 0.0,
+    "componentes": 15,
+    "vecinos": 30,
+    "semilla": 42
+  },
+  "conjuntos": {
+    "datos_1_a_600": {
+      "datos": "output/data.csv",
+      "usuarios": "resultados_tfidf/datos_1_a_600/resultados_tfidf_completo/usuarios.json"
+    },
+    "datos_completos": {
+      "datos": "output/datos_completos/data.csv",
+      "usuarios": "resultados_tfidf/datos_completos/resultados_tfidf_completo/usuarios.json"
+    }
+  }
+}

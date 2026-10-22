@@ -6,6 +6,9 @@ from pathlib import Path
 
 RAIZ = Path(__file__).parent
 CONFIG = RAIZ / "Clustering_jerarquico" / "config.json"
+CONFIG_DENSA = RAIZ / "vectorizacion_densa" / "config.json"
+CONJUNTOS = ["datos_1_a_600", "datos_completos"]
+MODELOS_DENSOS = ["roberta", "all-roberta", "multilingue"]     # los de MODELOS en vectorizacion_densa
 
 
 def ejecutar(*args):
@@ -34,6 +37,22 @@ def pedir_numero(maximo):
         if opcion.isdigit() and int(opcion) <= maximo:
             return int(opcion)
         print("Opción no válida")
+
+
+def elegir(titulo, opciones):
+    """Enseña las opciones numeradas y deja elegir una.
+
+    Pre:  opciones no está vacía.
+    Post: devuelve la opción elegida, o None si se elige 0.
+    """
+    print("\n" + titulo)
+    for i, opcion in enumerate(opciones, 1):
+        print(f"{i}) {opcion}")
+    print("0) Volver")
+    numero = pedir_numero(len(opciones))
+    if numero == 0:
+        return None
+    return opciones[numero - 1]
 
 
 def preprocesar():
@@ -111,6 +130,27 @@ def svd():
     ejecutar("vectorizacion.svd", "--entrada", carpeta, "--dimensiones", dimensiones)
 
 
+def densa(solo_reduccion):
+    """Pregunta el conjunto y el modelo y lanza la vectorización densa.
+
+    Pre:  los parámetros de PCA y UMAP están en vectorizacion_densa/config.json; para calcular
+          embeddings hace falta el CSV del conjunto que indica ese config.
+    Post: resultados guardados en resultados_roberta/<conjunto>/<modelo>/.
+    """
+    conjunto = elegir("¿Qué conjunto?", CONJUNTOS)
+    if conjunto is None:
+        return
+    modelo = elegir("¿Qué modelo?", MODELOS_DENSOS)
+    if modelo is None:
+        return
+
+    reduccion = json.loads(CONFIG_DENSA.read_text(encoding="utf-8"))["reduccion"]
+    print(f"\nPCA + UMAP de vectorizacion_densa/config.json: varianza {reduccion['varianza']}, "
+          f"min_dist {reduccion['min_dist']}")
+    modulo = "vectorizacion_densa.reduccionDim" if solo_reduccion else "vectorizacion_densa"
+    ejecutar(modulo, "--conjunto", conjunto, "--modelo", modelo)
+
+
 def vectorizar():
     """Submenú de vectorización.
 
@@ -121,8 +161,8 @@ def vectorizar():
     print("1) TF-IDF de palabras")
     print("2) TF-IDF de caracteres")
     print("3) SVD sobre un TF-IDF")
-    print("4) RoBERTa")
-    print("5) PCA + UMAP sobre RoBERTa")
+    print("4) RoBERTa: embeddings + PCA + UMAP")
+    print("5) Solo PCA + UMAP sobre embeddings ya calculados")
     print("0) Volver")
     opcion = pedir_numero(5)
 
@@ -133,9 +173,9 @@ def vectorizar():
     elif opcion == 3:
         svd()
     elif opcion == 4:
-        ejecutar("vectorizacion_densa")
+        densa(solo_reduccion=False)
     elif opcion == 5:
-        ejecutar("vectorizacion_densa.reduccionDim")
+        densa(solo_reduccion=True)
 
 
 def clustering():
@@ -155,14 +195,9 @@ def banco_pruebas():
     Pre:  existen las carpetas del conjunto dentro de resultados_tfidf/.
     Post: rejilla.csv, resumen.json e informe.html en resultados_experimentos_todas_<conjunto>.
     """
-    print("\n¿Qué conjunto?")
-    print("1) datos_1_a_600")
-    print("2) datos_completos")
-    print("0) Volver")
-    opcion = pedir_numero(2)
-    if opcion == 0:
+    conjunto = elegir("¿Qué conjunto?", CONJUNTOS)
+    if conjunto is None:
         return
-    conjunto = "datos_1_a_600" if opcion == 1 else "datos_completos"
 
     repeticiones = input("Repeticiones de estabilidad (0 = no medirla) [0]: ").strip()
     if repeticiones == "":

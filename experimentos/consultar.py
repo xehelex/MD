@@ -6,7 +6,7 @@ import sys
 
 from Clustering_jerarquico.algoritmo import ModeloEntrenado
 
-from .nueva_instancia import Clasificador
+from .nueva_instancia import Clasificador, es_densa
 
 
 def main(argv=None):
@@ -34,10 +34,16 @@ def main(argv=None):
     if not args.modelo.is_file():
         parser.error(f"No existe {args.modelo}. Generalo con: python -m Clustering_jerarquico modelo")
 
-    from preprocesador import Preprocesador
-
     modelo = ModeloEntrenado.cargar(args.modelo)
-    prep = Preprocesador({"datos": "."}, chat_words_path=args.chat_words)
+
+    # Roberta quiere el texto natural, asi que en la densa el preprocesador
+    # sobra y de paso nos ahorramos cargar nltk.
+    prep = None
+    if not es_densa(args.entrada):
+        from preprocesador import Preprocesador
+
+        prep = Preprocesador({"datos": "."}, chat_words_path=args.chat_words)
+
     clasificador = Clasificador(modelo, args.entrada,
                                 csv_textos=args.textos if args.textos.is_file() else None,
                                 preprocesador=prep)
@@ -48,7 +54,15 @@ def main(argv=None):
         return 1
 
     print(f"\n{modelo.enlace} / {modelo.distancia} / k = {modelo.k}")
-    print(f"El texto cae en el cluster {resultado.cluster}, con {resultado.tamano_cluster} usuarios.\n")
+    if resultado.ruta == "vecinos":
+        print(f"Sin el reductor UMAP ({clasificador.sin_reductor}): se asigna por vecinos, "
+              "que acierta menos. Hace falta el mismo Python con el que se genero.")
+    cae = f"El texto cae en el cluster {resultado.cluster}, con {resultado.tamano_cluster} usuarios."
+    if resultado.votos:
+        cae += f" ({resultado.votos[0]} de {resultado.votos[1]} vecinos)"
+    print(cae)
+    aviso = resultado.aviso()
+    print(f"AVISO: {aviso}\n" if aviso else "")
     print(f"{'usuario':14} {'dist':>7}  texto")
     print("-" * 78)
     for vecino in resultado.vecinos:

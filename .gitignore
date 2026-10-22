@@ -55,6 +55,7 @@ resultados_prueba*/
 /consulta*.png
 /cerca.png
 /lejos.png
+/denso*.png
 
 # Enlace al diccionario de jerga que algunos crean para lanzar el preprocesador
 # desde la raiz. Es de cada maquina; el fichero de verdad vive en preprocesador/.

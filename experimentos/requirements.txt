@@ -1,2 +1,11 @@
 numpy>=1.24
 scipy>=1.10
+
+# Solo para consultar un texto nuevo sobre la representacion densa
+# (python -m experimentos.consultar --entrada resultados_roberta/...).
+# El banco de pruebas y el resto de modulos no los necesitan.
+#   torch
+#   transformers
+#   umap-learn        necesita Python 3.12 para abrir el reductor.joblib
+#   scikit-learn
+#   joblib

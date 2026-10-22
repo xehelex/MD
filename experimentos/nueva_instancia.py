@@ -5,6 +5,7 @@ si la representacion lo llevaba.
 """
 from __future__ import annotations
 
+import collections
 from dataclasses import dataclass
 import json
 from pathlib import Path
@@ -30,6 +31,25 @@ class Resultado:
     vecinos: list[Vecino]
     tokens: list[str]
     vector: np.ndarray
+    votos: tuple[int, int] | None = None     # (a favor, total), solo si fue por vecinos
+    ruta: str = ""                           # "umap" o "vecinos"; vacio en TF-IDF
+
+    def aviso(self) -> str:
+        """Por que no fiarse de esta asignacion. Solo en la densa.
+
+        Un vector de usuario es la media de cientos de posts, asi que una frase
+        corta se parece mas al ruido general que a un tema. En TF-IDF el minimo
+        ya lo pone el preprocesador.
+        """
+        if not self.ruta:
+            return ""
+        if len(self.tokens) < 10:
+            return (f"Solo {len(self.tokens)} palabras. Por debajo de 10 la asignacion "
+                    "no es de fiar: escribe una frase mas larga.")
+        if self.votos and self.votos[0] * 2 <= self.votos[1]:
+            return (f"Votacion repartida ({self.votos[0]} de {self.votos[1]}): "
+                    "el texto esta entre dos grupos.")
+        return ""
 
 
 def resolver_cadena(carpeta: Path) -> tuple[Path, Path | None]:
@@ -60,18 +80,115 @@ def resolver_cadena(carpeta: Path) -> tuple[Path, Path | None]:
     return origen, svd
 
 
+def es_densa(carpeta: Path) -> bool:
+    """Carpeta de la cadena Roberta: su config.json dice con que modelo se embebio."""
+    config = Path(carpeta) / "config.json"
+    return config.is_file() and "model_name" in json.loads(config.read_text(encoding="utf-8"))
+
+
+def embeddings_crudos(carpeta: Path) -> tuple[np.ndarray, list[str]]:
+    """Los vectores de 1024 dimensiones de los que salio la reduccion.
+
+    El user_embeddings.npz de una carpeta PCA_umap_* ya viene reducido; los
+    crudos estan en su hermana sin_reduccion.
+    """
+    carpeta = Path(carpeta)
+    base = carpeta if carpeta.name == "sin_reduccion" else carpeta.parent / "sin_reduccion"
+    fichero = base / "user_embeddings.npz"
+    if not fichero.is_file():
+        raise FileNotFoundError(
+            f"No existe {fichero}. Hace falta para consultar textos nuevos sobre la "
+            f"representacion densa: generalo con python -m vectorizacion_densa.")
+    datos = np.load(fichero)
+    return datos["embeddings"], [str(u) for u in datos["subject_id"]]
+
+
+def cargar_reductor(carpeta: Path):
+    """El Pipeline escalado -> PCA -> UMAP, si este Python puede abrirlo.
+
+    Lleva bytecode de numba dentro y solo corre con el Python que lo genero
+    (3.12); las demas versiones fallan al cargar o al transformar. Devuelve
+    (reductor, motivo) para poder decir por que se tira de los vecinos.
+    """
+    ruta = Path(carpeta) / "reductor.joblib"
+    if not ruta.is_file():
+        return None, f"no existe {ruta.name}"
+    # Abrirlo importa umap, que si encuentra tensorflow instalado se trae su
+    # parametric_umap entero y suelta un aviso de CPU que no viene a cuento.
+    import os
+
+    os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+    try:
+        return joblib.load(ruta), ""
+    except Exception as error:       # numba falla distinto segun la version
+        return None, f"{type(error).__name__}: {str(error)[:70]}"
+
+
+class EmbebedorRoberta:
+    """Texto suelto -> vector de Roberta, igual que se hizo al entrenar.
+
+    Tira de vectorizacion_densa en vez de copiar la limpieza, para que no se
+    queden dos versiones distintas.
+    """
+
+    def __init__(self, model_name: str, max_length: int = 512):
+        import transformers
+
+        from vectorizacion_densa.roberta import RobertaPorUsuario
+
+        # Calla el informe de pesos: roberta-large trae cabeza de lenguaje y
+        # aqui solo se usa el cuerpo, asi que las "UNEXPECTED" son normales.
+        transformers.logging.set_verbosity_error()
+        # data_path no se usa: solo queremos el tokenizador y el modelo.
+        self.roberta = RobertaPorUsuario(model_name=model_name, max_length=max_length)
+
+    def __call__(self, texto: str) -> np.ndarray:
+        from tqdm import tqdm
+
+        limpio = self.roberta.clean_text(texto)
+        if not limpio:
+            raise ValueError("El texto se queda vacio al limpiarlo (URLs y menciones se quitan).")
+        with tqdm(total=1, disable=True) as barra:
+            return self.roberta._encode_chunk([limpio], barra)
+
+
 class Clasificador:
     """Une modelo, vectorizador y textos para responder sobre un texto nuevo."""
 
     def __init__(self, modelo, carpeta_representacion, csv_textos=None, preprocesador=None):
         """carpeta_representacion tiene que ser la misma con la que se entreno el modelo."""
         self.modelo = modelo
-        carpeta_tfidf, ruta_svd = resolver_cadena(Path(carpeta_representacion))
+        carpeta = Path(carpeta_representacion)
+        self.densa = es_densa(carpeta)
 
-        self.vectorizador = joblib.load(carpeta_tfidf / "vectorizador.joblib")
-        self.svd = joblib.load(ruta_svd) if ruta_svd else None
+        if self.densa:
+            # Repetir la cadena entera acierta el 95% frente al 87% de ir por
+            # vecinos; los vecinos son el respaldo si el reductor no abre.
+            config = json.loads((carpeta / "config.json").read_text(encoding="utf-8"))
+            self.vectorizador = self.svd = None
+            self.embeddings, usuarios_crudos = embeddings_crudos(carpeta)
+            self.reductor, self.sin_reductor = cargar_reductor(carpeta)
+            self.embebedor = EmbebedorRoberta(config["model_name"],
+                                              config.get("max_length", 512))
+        else:
+            carpeta_tfidf, ruta_svd = resolver_cadena(carpeta)
+            self.vectorizador = joblib.load(carpeta_tfidf / "vectorizador.joblib")
+            self.svd = joblib.load(ruta_svd) if ruta_svd else None
+
         self.usuarios = [u["usuario"] for u in
-                         json.loads((Path(carpeta_representacion) / "usuarios.json").read_text(encoding="utf-8"))]
+                         json.loads((carpeta / "usuarios.json").read_text(encoding="utf-8"))]
+        if self.densa:
+            if usuarios_crudos != self.usuarios:
+                raise ValueError(
+                    f"{carpeta} y su sin_reduccion no tienen los mismos usuarios en el mismo "
+                    "orden, asi que las etiquetas del modelo no se corresponden con los vectores.")
+            # Contar usuarios no basta: un modelo de TF-IDF sobre los mismos
+            # 598 pasa el filtro y luego da vecinos de otro espacio.
+            dimensiones = np.load(carpeta / "X.npy").shape[1]
+            if self.modelo.X.shape[1] != dimensiones:
+                raise ValueError(
+                    f"El modelo tiene {self.modelo.X.shape[1]} dimensiones y {carpeta} tiene "
+                    f"{dimensiones}: no se entreno con esta representacion.")
         if len(self.usuarios) != self.modelo.X.shape[0]:
             raise ValueError(
                 f"{carpeta_representacion} tiene {len(self.usuarios)} usuarios y el modelo se entreno con "
@@ -112,7 +229,16 @@ class Clasificador:
         return "El texto se queda sin tokens utiles tras el preproceso."
 
     def vectorizar(self, texto: str):
-        """Texto crudo -> vector en el mismo espacio que el entrenamiento."""
+        """Texto crudo -> vector en el mismo espacio que el entrenamiento.
+
+        Con la representacion densa el espacio es el de Roberta (1024), no el
+        del modelo (15 tras UMAP): la asignacion se hace por vecinos, no con
+        modelo.predecir.
+        """
+        if self.densa:
+            # Roberta quiere el texto natural: al entrenar tampoco se lematizo.
+            return self.embebedor(texto), texto.split()
+
         if self.preprocesador is not None:
             tokens = self.preprocesador._procesar_texto(texto)
             if not tokens:
@@ -144,12 +270,12 @@ class Clasificador:
         return self._pca, self._coords
 
     def grafico(self, resultado: "Resultado", ruta) -> Path:
-        """Guarda un PNG situando a cada usuario por su distancia real al texto.
+        """Guarda un PNG con la nube de usuarios proyectada a 2D por PCA.
 
-        Nada de proyectar a 2D: de 100 dimensiones a 2 se pierde tanto que dos
-        puntos pegados en el papel pueden estar lejisimos de verdad, y entonces
-        no se entiende por que los vecinos marcados son los vecinos. Aqui el eje
-        X ES la distancia, asi que lo que se ve a la izquierda esta cerca y punto.
+        La posicion en el papel enganna: de 100 dimensiones a 2 se pierde tanto
+        que dos puntos pegados pueden estar lejisimos de verdad. Por eso la
+        distancia real no va en la posicion sino en el color, y los vecinos se
+        unen con una linea al texto.
         """
         import matplotlib
         matplotlib.use("Agg")
@@ -162,30 +288,39 @@ class Clasificador:
         pca, coords = self._proyeccion()
         vector = (resultado.vector.toarray() if sparse.issparse(resultado.vector)
                   else np.asarray(resultado.vector))
-        punto = pca.transform(vector)[0]
 
-        D = distancias(resultado.vector, self.modelo.X, self.modelo.distancia)[0]
+        if self.densa:
+            # El PCA esta hecho sobre las coordenadas de UMAP y el texto vive
+            # en el de Roberta, asi que va a la media de sus vecinos.
+            D = distancias(vector, self.embeddings, "cosine")[0]
+            cercanos = np.argsort(D)[:10]
+            peso = 1.0 / (D[cercanos] + 1e-9)
+            punto = (coords[cercanos] * peso[:, None]).sum(0) / peso.sum()
+        else:
+            punto = pca.transform(vector)[0]
+            D = distancias(resultado.vector, self.modelo.X, self.modelo.distancia)[0]
         etiquetas = self.modelo.etiquetas
         fila = {u: i for i, u in enumerate(self.usuarios)}
         cercanos = [fila[v.usuario] for v in resultado.vecinos if v.usuario in fila]
 
-        # Cada cluster tiene su tono, pero la saturacion la pone su distancia real
-        # al texto. Asi un punto que cae cerca en el papel pero cuyo grupo esta
-        # lejos de verdad sale descolorido y no engaña: la proyeccion 2D pierde
-        # tanto que la posicion por si sola no vale para juzgar cercania.
+        # El tono dice de que cluster es y la saturacion su distancia real: la
+        # posicion en 2D sola no vale para juzgar cercania.
         medias = {c: float(D[etiquetas == c].mean()) for c in range(self.modelo.k)}
         cerca, lejos = min(medias.values()), max(medias.values())
         margen = max(lejos - cerca, 1e-9)
 
-        # Cada punto lleva SU propia intensidad, no la media de su grupo: dentro
-        # de un mismo cluster hay gente mucho mas parecida que otra y pintarlos
-        # todos igual tira esa informacion. El tono dice de que grupo es, la
-        # intensidad cuanto se parece ese usuario concreto.
+        # Intensidad por usuario y no por grupo: dentro de un cluster hay
+        # gente mucho mas parecida que otra.
         suyo = D.min(), D.max()
         punto_p = (1 - (D - suyo[0]) / max(suyo[1] - suyo[0], 1e-9)) ** 0.8
 
         orden = sorted(medias, key=medias.get)
         orden.remove(resultado.cluster)
+
+        # Con Roberta todo cabe en un cono de 0.015, asi que con dos decimales
+        # todos los grupos pondrian 0.01.
+        separacion = max(lejos - cerca, 1e-9)
+        decimales = min(6, max(2, int(np.ceil(-np.log10(separacion))) + 1))
 
         def pintar(c, tono, fuerza, etiqueta, asignado=False):
             miembros = np.flatnonzero(etiquetas == c)
@@ -195,9 +330,8 @@ class Clasificador:
             p = (p - p.min()) / max(p.max() - p.min(), 1e-9) if len(p) > 1 else np.ones_like(p)
 
             if asignado:
-                # Curva pronunciada: con un grupo grande casi todos los puntos
-                # caen en mitad del rango y se ven iguales. Elevando a 2 solo se
-                # oscurecen los que de verdad se parecen y el resto queda claro.
+                # Al cuadrado: en un grupo grande casi todos caen en mitad
+                # del rango y se verian iguales.
                 q = p ** 2
                 colores = [colorsys.hsv_to_rgb(tono, 0.18 + 0.72 * qi, 1.0 - 0.45 * qi) for qi in q]
                 tamanos, opacidades = 12 + 48 * q, 0.40 + 0.55 * q
@@ -213,14 +347,12 @@ class Clasificador:
         for i, c in enumerate(reversed(orden)):
             fuerza = 0.40 + 0.45 * (1 - (medias[c] - cerca) / margen) ** 0.8   # visibles, pero por debajo del asignado
             tono = 0.33 + 0.30 * (len(orden) - 1 - i) / max(len(orden) - 1, 1)
-            # La distancia media, no un "1 - distancia" en porcentaje: tras el SVD
-            # los vectores tienen componentes negativas, el coseno baja de 0 y la
-            # distancia llega a 1.3, asi que ese porcentaje salia negativo con k
-            # grande. La distancia se lee directa: 0 = encima, 1 = perpendicular.
-            pintar(c, tono, fuerza, f"cluster {c} — dist {medias[c]:.2f}")
+            # Distancia y no "1 - distancia" en porcentaje: tras el SVD hay
+            # componentes negativas, la distancia pasa de 1 y salia negativo.
+            pintar(c, tono, fuerza, f"cluster {c} — dist {medias[c]:.{decimales}f}")
 
         pintar(resultado.cluster, 0.0, 1.0,
-               f"cluster {resultado.cluster} — ASIGNADO, dist {medias[resultado.cluster]:.2f}",
+               f"cluster {resultado.cluster} — ASIGNADO, dist {medias[resultado.cluster]:.{decimales}f}",
                asignado=True)
 
         # Las lineas hacen falta porque la X casi nunca cae junto a sus vecinos:
@@ -250,15 +382,42 @@ class Clasificador:
         plt.close(fig)
         return ruta
 
+    def _cluster_por_votacion(self, X, cuantos: int = 15):
+        """Respaldo sin el reductor: k-NN sobre las etiquetas del clustering.
+
+        Si el texto no puede llegar al espacio de UMAP, se mira a quien se
+        parece en el de Roberta y hereda su grupo.
+        """
+        from Clustering_jerarquico.algoritmo import distancias
+
+        D = distancias(X, self.embeddings, "cosine")[0]
+        cercanos = np.argsort(D)[:min(cuantos, len(D))]
+        votos = collections.Counter(int(self.modelo.etiquetas[i]) for i in cercanos)
+        cluster, a_favor = votos.most_common(1)[0]
+        return cluster, (a_favor, len(cercanos))
+
     def consultar(self, texto: str, vecinos: int = 5) -> Resultado:
         """Asigna el texto a un cluster y busca los usuarios mas cercanos dentro."""
         X, tokens = self.vectorizar(texto)
-        cluster = int(self.modelo.predecir(X)[0])
 
         from Clustering_jerarquico.algoritmo import distancias
 
+        votos, ruta = None, ""
+        if self.densa and self.reductor is not None:
+            ruta = "umap"
+            # El texto recorre la misma cadena que los datos de entrenamiento.
+            cluster = int(self.modelo.predecir(self.reductor.transform(X))[0])
+            referencia, metrica = self.embeddings, "cosine"
+        elif self.densa:
+            ruta = "vecinos"
+            cluster, votos = self._cluster_por_votacion(X)
+            referencia, metrica = self.embeddings, "cosine"
+        else:
+            cluster = int(self.modelo.predecir(X)[0])
+            referencia, metrica = self.modelo.X, self.modelo.distancia
+
         dentro = np.flatnonzero(self.modelo.etiquetas == cluster)
-        D = distancias(X, self.modelo.X[dentro], self.modelo.distancia)[0]
+        D = distancias(X, referencia[dentro], metrica)[0]
         orden = np.argsort(D)[:vecinos]
 
         return Resultado(
@@ -270,4 +429,6 @@ class Clasificador:
                      for i in orden],
             tokens=tokens,
             vector=X,
+            votos=votos,
+            ruta=ruta,
         )

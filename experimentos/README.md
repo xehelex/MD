@@ -128,6 +128,74 @@ El texto necesita al menos 3 palabras con contenido: las vacías (`I`, `can`,
 El gráfico usa PCA y no t-SNE porque PCA sabe proyectar puntos nuevos sobre un
 plano ya calculado; con t-SNE habría que rehacer la nube en cada consulta.
 
+### Con la representación densa (Roberta + PCA + UMAP)
+
+Se reconoce sola por el `config.json` de la carpeta y cambia de estrategia:
+
+```powershell
+python -m experimentos.consultar "I have a gambling addiction and I relapsed again at the casino" --entrada resultados_roberta/datos_1_a_600/roberta/PCA_umap_0.9_0.0 --modelo <modelo entrenado sobre esa carpeta>
+```
+
+```
+El texto cae en el cluster 6, con 137 usuarios.
+```
+
+El texto recorre la misma cadena que los datos de entrenamiento: se embebe con
+Roberta y se pasa por el `reductor.joblib` (escalado → PCA → UMAP) antes de
+preguntarle al modelo.
+
+Hacen falta las dependencias de la cadena densa, que el `requirements.txt` de
+aquí no instala por defecto porque el resto de módulos no las usa:
+
+```powershell
+python -m pip install torch transformers umap-learn scikit-learn joblib
+```
+
+La primera consulta descarga `roberta-large` (1,4 GB) a la caché de Hugging
+Face. Y hace falta un modelo entrenado sobre esa misma carpeta: el `modelo.pkl`
+de TF-IDF no vale y se rechaza por dimensiones.
+
+**Hace falta Python 3.12**, el mismo con el que se generó el reductor. El
+`.joblib` lleva bytecode de numba dentro y ninguna otra versión lo ejecuta:
+
+| Python | |
+|---|---|
+| 3.10 | `code expected at most 16 arguments, got 18` al cargar |
+| 3.11 | carga, pero `AssertionError` al transformar |
+| **3.12** | **funciona** |
+| 3.13 | carga, pero `IndexError` al transformar |
+
+El README de la raíz dice «3.10 o superior»; para esta parte no vale.
+
+Si el reductor no se puede abrir no falla: avisa y asigna por los 15 vecinos más
+cercanos en el espacio de Roberta de 1024 dimensiones, heredando el cluster que
+más se repita. Acierta menos. Medido sobre 60 usuarios de entrenamiento, de los
+que ya sabemos su cluster:
+
+| ruta | acierta |
+|---|---|
+| Roberta → reductor → modelo | **57 de 60 (95%)** |
+| vecinos en 1024 dimensiones | 52 de 60 (87%) |
+
+**Ojo con los textos cortos.** Los vectores de usuario son la media de cientos
+de publicaciones, así que una frase breve se parece más al ruido general que a
+un tema concreto. Medido alargando el mismo texto:
+
+| palabras | cluster | |
+|---:|---:|---|
+| 4 | 5 | mal |
+| 8 | 5 | mal por vecinos, bien por UMAP |
+| 10 | 6 | bien |
+| 19 | 6 | bien |
+
+Por eso la salida avisa por debajo de 10 palabras. Cuando va por vecinos enseña
+además la votación, porque una votación holgada tampoco garantiza nada: con 4
+palabras salió 14 de 15 y estaba mal.
+
+Las distancias tampoco se leen igual. En el espacio de Roberta los 598 usuarios
+caben en un cono de 0,015 de ancho (mediana 0,0013), frente al 0,67 de mediana
+en TF-IDF. El orden sirve; el valor absoluto no.
+
 ## Bootstrap
 
 Responde a "¿y si me hubieran tocado otros 598 usuarios?". Saca muestras del

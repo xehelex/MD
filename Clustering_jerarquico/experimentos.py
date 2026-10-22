@@ -54,13 +54,13 @@ def buscar_k(puntuacion, k_min: int, k_max: int, metodo: str = "mallado", puntos
 
 
 def estabilidad(modelo, X, resultado, ks, repeticiones: int, semilla: int) -> dict:
-    """Mide si la partición se mantiene al quitar datos.
+    """Mide si el reparto en grupos se mantiene al quitar usuarios.
 
-    Se reajusta el árbol con un 80 % de las filas (sin reemplazo) y se compara su corte con el del
-    árbol completo usando el ARI, solo sobre las filas que están en los dos.
+    Se rehace el árbol con un 80 % de los usuarios (al azar, sin repetir) y se compara su reparto con el
+    del árbol completo usando el ARI, solo con los usuarios que están en los dos.
 
     Pre:  resultado es el árbol de modelo ajustado con X, ks son valores de k válidos y repeticiones >= 1.
-    Post: {k: ARI medio} (1 = la partición no cambia).
+    Post: {k: ARI medio} (1 = el reparto no cambia).
     """
     rng = np.random.default_rng(semilla)
     n = X.shape[0]
@@ -69,7 +69,9 @@ def estabilidad(modelo, X, resultado, ks, repeticiones: int, semilla: int) -> di
         idx = np.sort(rng.choice(n, size=max(int(0.8 * n), max(ks)), replace=False))
         sub = modelo.fit(X[idx])
         for k in ks:
-            aris[k].append(adjusted_rand_index(resultado.etiquetas(k)[idx], sub.etiquetas(k)))
+            reparto_todos = resultado.etiquetas(k)[idx]   # reparto con todos, mirando solo a los del 80 %
+            reparto_80 = sub.etiquetas(k)                 # reparto rehecho solo con el 80 %
+            aris[k].append(adjusted_rand_index(reparto_todos, reparto_80))
     return {k: float(np.mean(v)) for k, v in aris.items()}
 
 

@@ -1,5 +1,5 @@
 {
-  "entrada": "resultados_tfidf/datos_1_a_600/resultados_tfidf_caracteres4_completo_svd100",
+  "entrada": "resultados_roberta/datos_completos/roberta/PCA_umap_0.9_0.5",
   "salida": "resultados_clustering_completo",
   "distancias": ["cosine"],
   "enlaces": ["single", "complete", "average", "ward"],
@@ -16,7 +16,7 @@
   "mejor_modelo": {
     "enlace": "ward",
     "distancia": "cosine",
-    "k": 6,
-    "archivo": "modelo.pkl"
+    "k": 2,
+    "archivo": "modelo_roberta.pkl"
   }
 }

@@ -1,7 +1,7 @@
 """Métricas para evaluar una partición.
 
-Internas: silhouette, Davies-Bouldin, Calinski-Harabasz y correlación cofenética.
-Externa: ARI (compara dos particiones, la usamos para medir la estabilidad).
+Calidad de los grupos: silhouette, Davies-Bouldin, Calinski-Harabasz y correlación cofenética.
+Estabilidad: ARI, que dice cuánto se parecen dos repartos de los mismos usuarios.
 Todas funcionan con X densa (np.ndarray) o dispersa (scipy.sparse).
 """
 import numpy as np
@@ -156,21 +156,25 @@ def calinski_harabasz(X, etiquetas) -> float:
 # endregion
 
 
-# region Índice externo
+# region Estabilidad
 
-def adjusted_rand_index(etiquetas_a, etiquetas_b) -> float:
-    """Índice de Rand ajustado (ARI) entre dos particiones de las mismas instancias.
+def adjusted_rand_index(reparto_a, reparto_b) -> float:
+    """Índice de Rand ajustado (ARI): cuánto se parecen dos repartos en grupos de los mismos usuarios.
 
-    Pre:  las dos particiones tienen la misma longitud.
+    Mira cada par de usuarios y comprueba si los dos repartos coinciden en ponerlos juntos o separados,
+    descontando lo que coincidirían por azar. No importa el número que tenga cada grupo, solo quién va con quién.
+    Lo usamos para la estabilidad: reparto con todos los usuarios frente a reparto rehecho con el 80 %.
+
+    Pre:  los dos repartos tienen la misma longitud y la posición i es el mismo usuario en los dos.
     Post: 1 si son iguales, alrededor de 0 si solo coinciden por azar (puede ser negativo).
     """
-    _, a = np.unique(etiquetas_a, return_inverse=True)
-    _, b = np.unique(etiquetas_b, return_inverse=True)
+    _, a = np.unique(reparto_a, return_inverse=True)
+    _, b = np.unique(reparto_b, return_inverse=True)
     if len(a) != len(b):
-        raise ValueError("Las dos particiones tienen que tener la misma longitud.")
+        raise ValueError("Los dos repartos tienen que tener la misma longitud.")
     if len(a) < 2:
         return 1.0
-    # Tabla de contingencia: cuántas instancias hay en el cluster i de A y en el j de B
+    # Tabla de contingencia: cuántos usuarios están en el grupo i del reparto A y en el j del B
     tabla = np.zeros((a.max() + 1, b.max() + 1))
     np.add.at(tabla, (a, b), 1)
     pares = lambda x: float((x * (x - 1) / 2).sum())   # suma de "x sobre 2"

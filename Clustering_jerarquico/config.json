@@ -5,7 +5,7 @@
   "enlaces": ["single", "complete", "average", "ward"],
   "p": 2,
   "k_min": 2,
-  "k_max": 20,
+  "k_max": 34,
   "criterios": ["silhouette", "davies_bouldin", "calinski_harabasz"],
   "busqueda": "mallado",
   "puntos_malla": 12,

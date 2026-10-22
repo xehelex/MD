@@ -213,9 +213,15 @@ class Clasificador:
         for i, c in enumerate(reversed(orden)):
             fuerza = 0.40 + 0.45 * (1 - (medias[c] - cerca) / margen) ** 0.8   # visibles, pero por debajo del asignado
             tono = 0.33 + 0.30 * (len(orden) - 1 - i) / max(len(orden) - 1, 1)
-            pintar(c, tono, fuerza, f"cluster {c} — {(1 - medias[c]):.0%}")
+            # La distancia media, no un "1 - distancia" en porcentaje: tras el SVD
+            # los vectores tienen componentes negativas, el coseno baja de 0 y la
+            # distancia llega a 1.3, asi que ese porcentaje salia negativo con k
+            # grande. La distancia se lee directa: 0 = encima, 1 = perpendicular.
+            pintar(c, tono, fuerza, f"cluster {c} — dist {medias[c]:.2f}")
 
-        pintar(resultado.cluster, 0.0, 1.0, f"cluster {resultado.cluster} — ASIGNADO", asignado=True)
+        pintar(resultado.cluster, 0.0, 1.0,
+               f"cluster {resultado.cluster} — ASIGNADO, dist {medias[resultado.cluster]:.2f}",
+               asignado=True)
 
         # Las lineas hacen falta porque la X casi nunca cae junto a sus vecinos:
         # el texto es una frase y los usuarios tienen cientos de publicaciones,
@@ -233,7 +239,7 @@ class Clasificador:
         ax.set_xlabel("PCA 1")
         ax.set_ylabel("PCA 2")
         ax.legend(loc="center left", bbox_to_anchor=(1.01, 0.5), fontsize=8.5,
-                  title="parecido medio", title_fontsize=9)
+                  title="distancia media al texto", title_fontsize=9)
         ax.grid(alpha=0.15)
         ax.set_axisbelow(True)
 

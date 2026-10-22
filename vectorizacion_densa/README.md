@@ -73,7 +73,8 @@ resultados_roberta/
 │   └── <modelo>/
 │       ├── sin_reduccion/                    embeddings tal cual
 │       └── PCA_umap_<varianza>_<min_dist>/   p. ej. PCA_umap_0.9_0.0
-└── datos_completos/          2.344 usuarios (los de resultados_tfidf/datos_completos)
+└── datos_completos/          las de ahora tienen 2.000 usuarios; recalculadas con el CSV
+                              completo serán los 2.344 de resultados_tfidf/datos_completos
 ```
 
 El nombre de la carpeta reducida sale de `varianza` y `min_dist` del JSON. Si se cambian otros parámetros y no

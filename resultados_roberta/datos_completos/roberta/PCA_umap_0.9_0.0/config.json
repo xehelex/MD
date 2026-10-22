@@ -1,9 +1,17 @@
 {
+  "conjunto": "datos_completos",
   "modelo": "roberta",
   "reduccion": "PCA_umap_0.9_0.0",
-  "datos": "output\\data.csv",
+  "datos": "output/data.csv",
   "model_name": "FacebookAI/roberta-large",
   "max_length": 512,
   "batch_size": 32,
-  "normalizar": false
+  "normalizar": false,
+  "parametros_reduccion": {
+    "varianza": 0.9,
+    "min_dist": 0.0,
+    "componentes": 15,
+    "vecinos": 30,
+    "semilla": 42
+  }
 }

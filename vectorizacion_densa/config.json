@@ -1,5 +1,5 @@
 {
-  "conjunto": "datos_1_a_600",
+  "conjunto": "datos_completos",
   "modelo": "roberta",
   "reduccion": {
     "varianza": 0.9,
@@ -14,7 +14,7 @@
       "usuarios": "resultados_tfidf/datos_1_a_600/resultados_tfidf_completo/usuarios.json"
     },
     "datos_completos": {
-      "datos": "output/datos_completos/data.csv",
+      "datos": "output/data.csv",
       "usuarios": "resultados_tfidf/datos_completos/resultados_tfidf_completo/usuarios.json"
     }
   }

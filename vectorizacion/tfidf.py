@@ -1,3 +1,29 @@
+"""Carga de historiales por usuario y vectorizador TF-IDF por publicaciones.
+
+Precondiciones:
+    - cargar_historiales: carpeta (sin subcarpetas) con XML <INDIVIDUAL> de ID
+      único, con <WRITING> que tienen DATE en formato ISO, y al menos una
+      publicación útil por usuario.
+    - cargar_historiales_csv: CSV con subject_id y text_Clustering; la columna
+      date es opcional.
+    - crear_vectorizador: ngramas >= 1, min_df >= 1, 0 < max_df <= 1,
+      representacion "palabras" o "caracteres4"; quitar_vacias solo con palabras.
+    - TfidfPorUsuario recibe cada documento como una secuencia de publicaciones
+      (str), nunca un único str.
+
+Postcondiciones:
+    - Se devuelven Historial inmutables:
+        XML: en el orden de los nombres de archivo, con el texto limpiado por
+             limpiar_texto (entidades reparadas, URLs y menciones sustituidas,
+             negaciones expandidas).
+        CSV: en orden lexicográfico ascendente de ID y en orden cronológico si hay
+             date; las filas sin ID o sin texto se descartan y, si se pasa informe,
+             se registran ahí.
+    - crear_vectorizador devuelve un vectorizador sin ajustar que produce CSR
+      float32 normalizada L2. Los n-gramas nunca cruzan de una publicación a otra,
+      y las stopwords, si se quitan, conservan las negaciones.
+    - Los XML y el CSV de entrada nunca se modifican.
+"""
 
 import pandas as pd
 from dataclasses import dataclass

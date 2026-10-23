@@ -1,4 +1,19 @@
-"""Carga común de representaciones dispersas y densas y sus usuarios."""
+"""Carga común de representaciones dispersas y densas y de sus usuarios.
+
+Precondiciones:
+    - cargar_matriz: la carpeta contiene exactamente uno de X.npz (scipy) o X.npy
+      (numpy, sin pickle).
+    - cargar_usuarios: la carpeta contiene usuarios.json, una lista con n_filas
+      diccionarios donde la posición i tiene fila == i y un "usuario" de texto no vacío.
+
+Postcondiciones:
+    - cargar_matriz devuelve la matriz sin cambiar su formato: CSR si viene de
+      X.npz, ndarray si viene de X.npy. Garantiza que es 2D, numérica, no vacía y finita.
+    - cargar_usuarios devuelve la lista tal cual, con los IDs comprobados como
+      únicos y alineados con las filas.
+    - Si algo no se cumple: FileNotFoundError si falta la matriz, ValueError en el
+      resto de casos. Nunca se escribe en disco.
+"""
 
 import json
 from pathlib import Path

@@ -1,4 +1,30 @@
-"""Vectoriza todos los usuarios del CSV: python -m vectorizacion --help."""
+"""Vectoriza todos los usuarios del CSV preprocesado con TF-IDF: python -m vectorizacion --help.
+
+Precondiciones:
+    - Se ejecuta desde la raíz de MD como módulo (python -m vectorizacion).
+    - El CSV de --datos existe (por defecto output/data_preprocesado.csv) y tiene
+      las columnas subject_id y text_Clustering; text_Clustering es texto con
+      palabras separadas por espacios, no una lista de Python escrita como texto.
+    - --salida no existe o es una carpeta vacía.
+    - --representacion es "palabras" o "caracteres4". --ngramas (>= 1) y
+      --quitar-vacias solo se usan con "palabras".
+    - min_df >= 1, 0 < max_df <= 1, max_features >= 1 si se indica.
+    - Hay al menos min_df usuarios con texto útil en el CSV.
+    - Con --quitar-vacias hace falta NLTK; si falta el corpus de stopwords se descarga.
+
+Postcondiciones:
+    - Se crea --salida con cuatro archivos:
+        X.npz               matriz CSR float32, una fila por usuario, normalizada L2.
+        usuarios.json       {fila, usuario, archivo, publicaciones_utiles} por fila,
+                            en orden lexicográfico ascendente de ID.
+        vectorizador.joblib modelo TfidfPorUsuario ajustado (vocabulario + IDF),
+                            reutilizable con transform para usuarios nuevos.
+        resumen.json        configuración, versión de sklearn, SHA-256 del CSV,
+                            dimensiones, nnz, descartes y usuarios con vector cero.
+    - El vocabulario y los IDF se aprenden con todos los usuarios del CSV (sin train/test).
+    - El CSV de entrada no se modifica.
+    - Si alguna precondición falla, termina con un error de argparse y no escribe nada.
+"""
 
 import argparse
 import json
@@ -18,7 +44,7 @@ def main(argv=None):
     Requiere un CSV y una salida vacía. Exporta X.npz, usuarios.json, el modelo
     reutilizable y un resumen. El remuestreo corresponde al módulo de experimentos.
     """
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--datos", type=Path, default=Path("output/data_preprocesado.csv"))
     parser.add_argument("--salida", type=Path,
                         help="Carpeta nueva o vacía; por defecto resultados_tfidf/datos_1_a_600/resultados_tfidf[_caracteres4]_completo.")

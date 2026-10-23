@@ -13,6 +13,7 @@ import pandas as pd
 from scipy.sparse import load_npz
 
 from .__main__ import main
+from .matrices import cargar_matriz, cargar_usuarios
 from .tfidf import cargar_historiales_csv
 
 
@@ -101,8 +102,11 @@ class TestCompleto(unittest.TestCase):
         from Clustering_jerarquico.__main__ import main as jerarquico
 
         config = json.loads((Path(__file__).parent.parent / "Clustering_jerarquico" / "config.json").read_text(encoding="utf-8"))
-        self.assertTrue(config["entrada"].startswith("resultados_tfidf/datos_1_a_600/"))
-        self.assertTrue((Path(__file__).parent.parent / config["entrada"]).is_dir())
+        # La entrada la elige el equipo (TF-IDF, RoBERTa...): solo se exige que exista y se pueda cargar.
+        entrada = Path(__file__).parent.parent / config["entrada"]
+        self.assertTrue(entrada.is_dir(), f"No existe la entrada de config.json: {entrada}")
+        X = cargar_matriz(entrada)
+        cargar_usuarios(entrada, X.shape[0])
         with redirect_stdout(io.StringIO()), self.assertRaises(SystemExit) as salida:
             jerarquico(["--help"])
         self.assertEqual(salida.exception.code, 0)

@@ -1,4 +1,28 @@
-"""Reduce TF-IDF con TruncatedSVD y normaliza L2: python -m vectorizacion.svd."""
+"""Reduce TF-IDF con TruncatedSVD y normaliza L2: python -m vectorizacion.svd.
+
+Precondiciones:
+    - --entrada es una carpeta TF-IDF con X.npz dispersa y un usuarios.json válido.
+      Si existen vectorizador.joblib y resumen.json, solo se usan para las huellas.
+    - 1 <= --dimensiones <= min(n_usuarios, n_columnas) - 1.
+    - 0 <= --semilla < 2**32.
+    - --salida no existe o está vacía (por defecto <entrada>_svd<dimensiones>,
+      junto a la entrada).
+    - La matriz tiene varianza suficiente para que SVD dé estadísticas finitas.
+
+Postcondiciones:
+    - Se crea --salida con:
+        X.npy          float32 de forma (n_usuarios, dimensiones), filas
+                       normalizadas L2 y en el mismo orden que la entrada. Las filas
+                       cero se conservan y se listan en el resumen.
+        svd.joblib     Pipeline(TruncatedSVD aleatorizado con n_iter=7 + Normalizer L2)
+                       ajustado con todos los usuarios; transforma TF-IDF nuevos del
+                       mismo vectorizador.
+        usuarios.json  copia byte a byte de la entrada.
+        resumen.json   configuración, SHA-256 del origen y varianza explicada
+                       (medida antes de L2).
+    - Con la misma entrada, semilla y versión de scikit-learn, el resultado es reproducible.
+    - El TF-IDF de entrada no se modifica.
+"""
 
 import argparse
 import hashlib
@@ -82,7 +106,7 @@ def reducir(entrada, salida, dimensiones=100, semilla=42):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--entrada", type=Path, required=True, help="Carpeta TF-IDF con X.npz y usuarios.json.")
     parser.add_argument("--salida", type=Path, help="Carpeta nueva o vacía; por defecto <entrada>_svd<dimensiones>.")
     parser.add_argument("--dimensiones", type=int, default=100)

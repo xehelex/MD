@@ -1,4 +1,27 @@
-"""Curvas y umbrales de varianza de SVD sin centrar: python -m vectorizacion.analisis_svd."""
+"""Curvas y umbrales de varianza de SVD sin centrar: python -m vectorizacion.analisis_svd.
+
+Precondiciones:
+    - Cada --entrada es una carpeta TF-IDF con X.npz (dispersa; X.npy no vale)
+      y un usuarios.json válido (ver matrices.cargar_usuarios).
+    - Cada X tiene al menos 2 filas y 2 columnas, valores finitos y varianza no nula.
+    - Todas las entradas tienen los mismos usuarios en el mismo orden y nombres
+      de carpeta distintos.
+    - --salida no existe o está vacía.
+    - --dimensiones son enteros positivos; --umbrales están en (0, 1].
+    - Hay memoria para X·Xᵀ densa en float64: O(n_usuarios²)
+      (unos 44 MB con 2.344 usuarios).
+
+Postcondiciones:
+    - Se crea --salida con INFORME.md, comparativa.csv, umbrales.csv,
+      curva_completa.csv, resumen.json y varianza_acumulada.png/.svg.
+    - La curva cubre las dimensiones 1..min(n_usuarios, n_columnas) - 1, el mismo
+      límite que vectorizacion.svd. Las proporciones están en [0, 1] y la
+      acumulada es creciente y nunca pasa de 1.
+    - Para cada umbral se da la primera dimensión que lo alcanza, o None si no se alcanza.
+    - La varianza se mide antes de normalizar L2 y sin centrar (no es PCA). No
+      mide la calidad del clustering.
+    - Las matrices de entrada no se modifican y no se genera ningún modelo SVD.
+"""
 
 import argparse
 import csv
@@ -172,7 +195,7 @@ def analizar(entradas, salida, dimensiones=(50, 100, 200, 300, 400, 500), umbral
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--entrada", type=Path, action="append", required=True)
     parser.add_argument("--salida", type=Path, default=Path("resultados_tfidf/datos_1_a_600/resultados_analisis_svd"))
     parser.add_argument("--dimensiones", type=int, nargs="+", default=[50, 100, 200, 300, 400, 500])

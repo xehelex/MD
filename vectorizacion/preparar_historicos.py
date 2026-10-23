@@ -1,4 +1,24 @@
-"""Une y alinea TF-IDF históricos sin reajustar sus valores ni su vocabulario."""
+"""Une y alinea TF-IDF históricos sin reajustar sus valores ni su vocabulario.
+
+Precondiciones:
+    - --entrada es una carpeta histórica con X_train.npz, X_test.npz,
+      usuarios_train.json, usuarios_test.json, vectorizador.joblib y resumen.json.
+    - Train y test tienen el mismo número de columnas, matrices finitas y no vacías,
+      y no comparten IDs.
+    - --referencia es una representación válida (X + usuarios.json) y todos sus
+      usuarios están en el histórico.
+    - --salida no existe o está vacía.
+
+Postcondiciones:
+    - Se crea --salida con:
+        X.npz               train y test unidos y reordenados con los mismos usuarios
+                            y el mismo orden que la referencia; valores sin recalcular.
+        vectorizador.joblib copia exacta del histórico (ajustado solo con train).
+        usuarios.json       fila nueva, más particion_original y fila_original.
+        resumen.json        SHA-256 de los archivos de origen, usuarios excluidos
+                            (los que no están en la referencia) y vectores cero.
+    - Los archivos de --entrada y de --referencia no se modifican.
+"""
 
 import argparse
 import json
@@ -75,7 +95,7 @@ def preparar(entrada, referencia, salida):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--entrada", type=Path, required=True, help="Carpeta histórica con train y test.")
     parser.add_argument("--referencia", type=Path, default=Path("resultados_tfidf/datos_1_a_600/resultados_tfidf_completo"))
     parser.add_argument("--salida", type=Path, help="Por defecto <entrada>_historico_alineado.")

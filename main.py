@@ -15,15 +15,17 @@ def ejecutar(*args):
     """Lanza "python -m args" desde la carpeta del proyecto.
 
     Pre:  args[0] es un módulo del proyecto (por ejemplo "vectorizacion").
-    Post: el módulo ha terminado o se ha cancelado con Ctrl+C.
+    Post: el módulo ha terminado o se ha cancelado con Ctrl+C. Devuelve True si terminó bien.
     """
     print("\n> python -m", " ".join(args), "\n", flush=True)
     try:
         resultado = subprocess.run([sys.executable, "-m", *args], cwd=RAIZ)
         if resultado.returncode != 0:
             print("\nHa terminado con error")
+        return resultado.returncode == 0
     except KeyboardInterrupt:
         print("\nCancelado")
+        return False
 
 
 def pedir_numero(maximo):
@@ -65,6 +67,27 @@ def preprocesar():
     if carpeta == "":
         return
     ejecutar("preprocesador", "--datos", carpeta, "--guardar_csv")
+
+
+def analisis():
+    """Análisis exploratorio de los datos sin preprocesar (preprocesador --analisis).
+
+    Pre:  se escribe la carpeta con los XML de CLEF o el output/data.csv que guarda el preprocesador.
+    Post: informe guardado en output/analisis.txt y enseñado por pantalla, y gráfico de idiomas
+          en una ventana (y en un PNG si se escribe una ruta). Si no se escribe nada, no hace nada.
+    """
+    datos = input("Carpeta con los XML o output/data.csv: ").strip().strip('"')
+    if datos == "":
+        return
+    args = ["preprocesador", "--datos", datos, "--analisis"]
+    figura = input("PNG para guardar el gráfico de idiomas (vacío para no guardarlo): ").strip().strip('"')
+    if figura != "":
+        args += ["--guardar_fig", figura]
+
+    informe = RAIZ / "output" / "analisis.txt"
+    if ejecutar(*args) and informe.exists():
+        print("\n" + informe.read_text(encoding="utf-8"))
+        print(f"Informe guardado en {informe.relative_to(RAIZ).as_posix()}")
 
 
 def tfidf(representacion):
@@ -261,18 +284,27 @@ def experimentar():
 def instancia_nueva():
     """Asigna un texto nuevo a un cluster con el modelo guardado.
 
-    Pre:  existe modelo.pkl y se entrenó con la "entrada" de config.json.
-    Post: enseña el cluster y los usuarios más parecidos. Con RoBERTa avisa de que falta.
+    Pre:  existe el modelo de "mejor_modelo" y se entrenó con la "entrada" de config.json.
+    Post: enseña el cluster y los usuarios más parecidos, o avisa si la entrada no sirve.
     """
     config = json.loads(CONFIG.read_text(encoding="utf-8"))
     entrada = RAIZ / config["entrada"]
     modelo = config["salida"] + "/" + config["mejor_modelo"]["archivo"]
 
-    # para vectorizar el texto nuevo hace falta el modelo de TF-IDF o de SVD
-    if not (entrada / "vectorizador.joblib").exists() and not (entrada / "svd.joblib").exists():
-        print("\nFalta la funcionalidad: de momento solo funciona con TF-IDF o SVD")
+    # para vectorizar el texto nuevo hace falta el modelo de TF-IDF o de SVD, o una carpeta de
+    # RoBERTa (su config.json dice con qué modelo se embebió)
+    config_densa = entrada / "config.json"
+    densa = config_densa.exists() and "model_name" in json.loads(config_densa.read_text(encoding="utf-8"))
+    if not densa and not (entrada / "vectorizador.joblib").exists() and not (entrada / "svd.joblib").exists():
+        print("\nLa entrada de config.json no es TF-IDF, SVD ni RoBERTa: no se puede vectorizar el texto")
         return
-    ejecutar("experimentos.consultar", "--entrada", config["entrada"], "--modelo", modelo)
+    if not (RAIZ / modelo).exists():
+        print(f"\nNo existe {modelo}. Genéralo en Clustering > modelo")
+        return
+    texto = input("Texto a consultar: ").strip()
+    if texto == "":
+        return
+    ejecutar("experimentos.consultar", texto, "--entrada", config["entrada"], "--modelo", modelo)
 
 
 def main():
@@ -284,22 +316,25 @@ def main():
     while True:
         print("\n===== MENÚ =====")
         print("1) Preprocesar")
-        print("2) Vectorizar")
-        print("3) Clustering")
-        print("4) Experimentos")
-        print("5) Instancia nueva")
+        print("2) Análisis de los datos")
+        print("3) Vectorizar")
+        print("4) Clustering")
+        print("5) Experimentos")
+        print("6) Instancia nueva")
         print("0) Salir")
-        opcion = pedir_numero(5)
+        opcion = pedir_numero(6)
 
         if opcion == 1:
             preprocesar()
         elif opcion == 2:
-            vectorizar()
+            analisis()
         elif opcion == 3:
-            clustering()
+            vectorizar()
         elif opcion == 4:
-            experimentar()
+            clustering()
         elif opcion == 5:
+            experimentar()
+        elif opcion == 6:
             instancia_nueva()
         else:
             break

@@ -27,11 +27,14 @@ def main():
     args = vars(parser.parse_args())
 
     prep = Preprocesador(args)
-    if args["analisis"]:
-        prep.analisis_exploratorio(guardar_fig=args["guardar_fig"])
-    else:
-        df = prep.preprocesar_datos_clustering()
-        print(f"Publicaciones preprocesadas: {len(df)}")
+    try:
+        if args["analisis"]:
+            prep.analisis_exploratorio(guardar_fig=args["guardar_fig"])
+        else:
+            df = prep.preprocesar_datos_clustering()
+            print(f"Publicaciones preprocesadas: {len(df)}")
+    except ValueError as error:   # carpeta sin XML
+        parser.error(str(error))
 
 if __name__ == "__main__":
     main()

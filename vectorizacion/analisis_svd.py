@@ -43,6 +43,10 @@ def curva_varianza(X):
     No se centra X antes de descomponer: esto NO es PCA. Solo la matriz entre
     usuarios se densifica. Costes: memoria O(n_usuarios^2), diagonalización O(n^3).
     Se conserva el límite de dimensiones del comando svd: min(X.shape) - 1.
+
+    Pre:  X es dispersa, 2D, con al menos 2 filas y 2 columnas, finita y con varianza.
+    Post: (proporciones, acumulada) con min(X.shape) - 1 valores cada una; la acumulada es
+          creciente y está en [0, 1]. Si no se cumple la precondición, ValueError.
     """
     if not sparse.issparse(X) or X.ndim != 2 or min(X.shape) < 2:
         raise ValueError("Se requiere TF-IDF disperso con al menos dos filas y dos columnas.")
@@ -68,12 +72,21 @@ def curva_varianza(X):
 
 
 def localizar_umbral(acumulada, umbral):
-    """Primera dimensión que alcanza el umbral; None si no se alcanza."""
+    """Primera dimensión que alcanza el umbral; None si no se alcanza.
+
+    Pre:  acumulada es creciente y umbral está en (0, 1].
+    Post: dimensión (contando desde 1) en la que se alcanza el umbral, o None.
+    """
     posicion = int(np.searchsorted(acumulada, umbral, side="left"))
     return posicion + 1 if posicion < len(acumulada) else None
 
 
 def guardar_csv(ruta, filas, campos):
+    """Escribe filas de diccionarios en un CSV con cabecera.
+
+    Pre:  ruta es un Path que se puede escribir y cada fila tiene exactamente las claves de campos.
+    Post: CSV en UTF-8 guardado en ruta (si ya existía, se sobrescribe).
+    """
     with ruta.open("w", newline="", encoding="utf-8") as f:
         escritor = csv.DictWriter(f, fieldnames=campos)
         escritor.writeheader()
@@ -81,6 +94,12 @@ def guardar_csv(ruta, filas, campos):
 
 
 def guardar_grafica(resultados, umbrales, salida):
+    """Dibuja las curvas de varianza acumulada con los umbrales marcados.
+
+    Pre:  resultados vienen de analizar (con varianza_acumulada y umbrales) y salida es una
+          carpeta que existe.
+    Post: varianza_acumulada.png y .svg guardados en salida, sin abrir ventanas.
+    """
     # Backend sin ventanas: permite regenerar el informe desde un terminal.
     import matplotlib
     matplotlib.use("Agg")
@@ -117,6 +136,13 @@ def guardar_grafica(resultados, umbrales, salida):
 
 
 def analizar(entradas, salida, dimensiones=(50, 100, 200, 300, 400, 500), umbrales=(0.90, 0.95)):
+    """Calcula las curvas de varianza de cada entrada y escribe el informe completo.
+
+    Pre:  las del módulo: entradas TF-IDF (X.npz) con los mismos usuarios en el mismo orden y
+          nombres distintos, salida nueva o vacía, dimensiones enteras positivas y umbrales en (0, 1].
+    Post: en salida quedan INFORME.md, los CSV, resumen.json y las gráficas; devuelve el
+          informe. Si no se cumple la precondición, ValueError.
+    """
     salida = Path(salida)
     entradas = [Path(p) for p in entradas]
     dimensiones, umbrales = sorted(set(dimensiones)), sorted(set(umbrales))
@@ -195,6 +221,12 @@ def analizar(entradas, salida, dimensiones=(50, 100, 200, 300, 400, 500), umbral
 
 
 def main(argv=None):
+    """Punto de entrada: python -m vectorizacion.analisis_svd --entrada ... [--salida ...].
+
+    Pre:  argumentos de la línea de comandos (ver --help).
+    Post: como analizar, e imprime la dimensión de cada umbral; si algo falla, termina con el
+          error de argparse.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--entrada", type=Path, action="append", required=True)
     parser.add_argument("--salida", type=Path, default=Path("resultados_tfidf/datos_1_a_600/resultados_analisis_svd"))

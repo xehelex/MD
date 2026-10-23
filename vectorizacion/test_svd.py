@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
 
 import joblib
 import numpy as np
@@ -123,16 +122,15 @@ class TestSVD(unittest.TestCase):
             experimentar(["--entrada", str(self.entrada), "--entrada", str(self.salida)])
 
     def test_clustering_jerarquico_acepta_densa(self):
-        from Clustering_jerarquico.experimentos import main as experimentar
-        from Clustering_jerarquico.cli import cargar_configuracion
+        from Clustering_jerarquico.experimentos import experimentar
         reducir(self.entrada, self.salida, 2)
-        config = cargar_configuracion()
-        config["salida"] = str(self.raiz / "jerarquico")
-        with patch("Clustering_jerarquico.experimentos.cargar_configuracion", return_value=config), \
-                patch("Clustering_jerarquico.experimentos.guardar_busqueda_k"), redirect_stdout(io.StringIO()):
-            experimentar(["--entrada", str(self.salida), "--k_min", "2", "--k_max", "2", "--enlaces", "average"])
-        archivo = next((self.raiz / "jerarquico").rglob("resultados.json"))
-        resultado = json.loads(archivo.read_text(encoding="utf-8"))
+        config = json.loads((Path(__file__).resolve().parent.parent / "Clustering_jerarquico" / "config.json")
+                            .read_text(encoding="utf-8"))
+        config.update(k_min=2, k_max=2, enlaces=["average"], graficas=False)
+        destino = self.raiz / "jerarquico"
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            experimentar(cargar_matriz(self.salida).astype(np.float64), config, destino)
+        resultado = json.loads((destino / "resultados.json").read_text(encoding="utf-8"))
         self.assertEqual(resultado["parametros"]["instancias"], 6)
         self.assertEqual(resultado["parametros"]["atributos"], 2)
         self.assertEqual({r["criterio"] for r in resultado["resumen"]},

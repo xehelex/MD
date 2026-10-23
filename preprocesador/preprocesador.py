@@ -116,12 +116,20 @@ class Preprocesador:
         Lee y procesa todos los archivos XML contenidos en el directorio indicado.
 
         Precondiciones:
-            - directorio debe ser una ruta válida que contenga archivos XML con la estructura esperada (sujeto, ID, WRITING, TITLE, DATE, TEXT, INFO).
+            - directorio debe ser una ruta válida que contenga archivos XML con la estructura esperada (sujeto, ID, WRITING, TITLE, DATE, TEXT, INFO),
+              o el CSV que guarda --guardar_csv (output/data.csv), con esas mismas columnas.
+            - Hay al menos una publicación.
 
         Postcondiciones:
             - Retorna un DataFrame de Pandas con las columnas: subject_id, title, date, text, info, con fechas parseadas.
         """
         dir_data = Path(directorio)
+        if dir_data.suffix.lower() == ".csv":
+            # Todo como texto y sin convertir vacíos a NaN: así queda igual que leyendo los XML
+            df_data = pd.read_csv(dir_data, dtype=str, keep_default_na=False)
+            df_data["date"] = pd.to_datetime(df_data["date"], errors='coerce')
+            return df_data
+
         publicaciones = []
 
         # Leemos todos los xml
@@ -139,6 +147,8 @@ class Preprocesador:
                     "info": writing.findtext("INFO", default="")
                 })
 
+        if not publicaciones:
+            raise ValueError(f"No hay publicaciones en ningún XML de {dir_data}")
         df_data = pd.DataFrame(publicaciones)
         df_data["date"] = pd.to_datetime(df_data["date"], errors='coerce')
 

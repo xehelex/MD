@@ -23,7 +23,12 @@ from scipy import sparse
 
 
 def cargar_matriz(carpeta):
-    """Lee exactamente una X.npz (CSR) o X.npy (densa), sin convertir su formato."""
+    """Lee exactamente una X.npz (CSR) o X.npy (densa), sin convertir su formato.
+
+    Pre:  carpeta contiene exactamente uno de X.npz o X.npy.
+    Post: la matriz sin cambiar su formato (CSR o ndarray), 2D, numérica, no vacía y finita.
+          FileNotFoundError si no hay ninguna; ValueError en el resto de casos.
+    """
     carpeta = Path(carpeta)
     archivos = [p for p in (carpeta / "X.npz", carpeta / "X.npy") if p.is_file()]
     if not archivos:
@@ -41,7 +46,12 @@ def cargar_matriz(carpeta):
 
 
 def cargar_usuarios(carpeta, n_filas):
-    """Verifica la correspondencia fila-ID antes de reducir o comparar matrices."""
+    """Verifica la correspondencia fila-ID antes de reducir o comparar matrices.
+
+    Pre:  carpeta contiene usuarios.json y n_filas es el número de filas de su matriz.
+    Post: la lista de usuarios, con fila == posición e IDs de texto no vacíos y únicos;
+          ValueError si no.
+    """
     archivo = Path(carpeta) / "usuarios.json"
     usuarios = json.loads(archivo.read_text(encoding="utf-8"))
     if not isinstance(usuarios, list) or len(usuarios) != n_filas:

@@ -116,11 +116,35 @@ def embeddings_crudos(carpeta: Path) -> tuple[np.ndarray, list[str]]:
     return datos["embeddings"], [str(u) for u in datos["subject_id"]]
 
 
+def recompilar_distancias(reductor):
+    """Cambia las distancias de numba que UMAP guarda en el .joblib por las de este Python.
+
+    El pickle lleva el bytecode con el que se compilaron (3.12) y con otras
+    versiones numba falla al transformar. Son funciones de umap.distances, asi
+    que basta con volver a cogerlas de ahi: lo ajustado (grafo, embedding,
+    escalado y PCA) no cambia.
+
+    Pre:  reductor es el Pipeline escalado -> PCA -> UMAP de reduccionDim.
+    Post: el mismo reductor, con _input/_inverse/_output_distance_func de la
+          version instalada de umap. Lo que no se encuentre se deja como venia.
+    """
+    import umap.distances as distancias_umap
+
+    umap_ = reductor.steps[-1][1] if hasattr(reductor, "steps") else reductor
+    for atributo in ("_input_distance_func", "_inverse_distance_func", "_output_distance_func"):
+        nombre = getattr(getattr(umap_, atributo, None), "__qualname__", "")
+        nueva = getattr(distancias_umap, nombre, None) if nombre else None
+        if nueva is not None:
+            setattr(umap_, atributo, nueva)
+    return reductor
+
+
 def cargar_reductor(carpeta: Path):
     """El Pipeline escalado -> PCA -> UMAP, si este Python puede abrirlo.
 
-    Lleva bytecode de numba dentro y solo corre con el Python que lo genero
-    (3.12); las demas versiones fallan al cargar o al transformar.
+    Lleva bytecode de numba dentro, generado con 3.12. Al abrirlo se recompilan
+    sus distancias (recompilar_distancias), asi que tambien transforma con 3.13;
+    3.10 ni siquiera lo puede cargar.
 
     Pre:  carpeta es una ruta, exista o no el reductor.
     Post: (reductor, "") si se pudo abrir, (None, motivo) si no. Nunca lanza:
@@ -135,7 +159,7 @@ def cargar_reductor(carpeta: Path):
 
     os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
     try:
-        return joblib.load(ruta), ""
+        return recompilar_distancias(joblib.load(ruta)), ""
     except Exception as error:       # numba falla distinto segun la version
         return None, f"{type(error).__name__}: {str(error)[:70]}"
 
@@ -446,7 +470,8 @@ class Clasificador:
 
         Pre:  texto no vacio y vecinos >= 1.
         Post: Resultado con el cluster, hasta `vecinos` usuarios ordenados de
-              mas a menos parecido, y la ruta que se uso para asignarlo.
+              mas a menos parecido, y la ruta que se uso para asignarlo. Si el
+              reductor falla al transformar, se pasa a la ruta de vecinos.
         """
         X, tokens = self.vectorizar(texto)
 
@@ -454,9 +479,15 @@ class Clasificador:
 
         votos, ruta = None, ""
         if self.densa and self.reductor is not None:
+            try:
+                # El texto recorre la misma cadena que los datos de entrenamiento.
+                reducido = self.reductor.transform(X)
+            except Exception as error:       # por si numba falla aquí aun recompilando las distancias
+                self.reductor = None
+                self.sin_reductor = f"{type(error).__name__} al transformar"
+        if self.densa and self.reductor is not None:
             ruta = "umap"
-            # El texto recorre la misma cadena que los datos de entrenamiento.
-            cluster = int(self.modelo.predecir(self.reductor.transform(X))[0])
+            cluster = int(self.modelo.predecir(reducido)[0])
             referencia, metrica = self.embeddings, "cosine"
         elif self.densa:
             ruta = "vecinos"

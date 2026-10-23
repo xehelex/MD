@@ -98,16 +98,28 @@ Para guardar además el gráfico de idiomas:
 .\.venv\Scripts\python.exe -m preprocesador --datos "." --analisis --guardar_fig output/idiomas.png
 ```
 
+Si ya se preprocesó con `--guardar_csv`, el análisis puede leer el
+`output/data.csv` en vez de volver a recorrer los XML:
+
+```powershell
+.\.venv\Scripts\python.exe -m preprocesador --datos output/data.csv --analisis
+```
+
 Con `--analisis` solo se ejecuta el análisis: no se preprocesan los textos ni se
 generan los CSV. Los resultados no se imprimen por pantalla, sino que se escriben
 en `output/analisis.txt`. Además, se abre una ventana con el gráfico de
-distribución de idiomas y el programa finaliza al cerrarla.
+distribución de idiomas y el programa finaliza al cerrarla. La detección de
+idioma procesa unos 150-200 textos por segundo, así que con el millón de
+publicaciones del conjunto completo tarda más de una hora.
+
+También está en el menú del proyecto (`python main.py` → 2, desde la raíz de
+`MD`), que pide la carpeta o el CSV y al terminar enseña el informe por pantalla.
 
 ### 3.3. Opciones
 
 | Opción | Descripción | Valor por defecto |
 |---|---|---|
-| `--datos` | Carpeta con los XML (obligatoria). | |
+| `--datos` | Carpeta con los XML, o el `output/data.csv` que guarda `--guardar_csv` (obligatoria). | |
 | `--analisis` | Ejecuta únicamente el análisis exploratorio. | Desactivada |
 | `--guardar_fig` | Con `--analisis`: ruta donde guardar el gráfico de idiomas. | No se guarda |
 | `--guardar_csv` | Guarda `data.csv` y `data_preprocesado.csv` en `output`. | Desactivada |

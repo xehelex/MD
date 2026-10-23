@@ -15,10 +15,12 @@ Para no tener que acordarse de los comandos, desde la raíz de `MD`:
 .\.venv\Scripts\python.exe main.py
 ```
 
-Tiene cinco opciones: preprocesar, vectorizar (TF-IDF, SVD, RoBERTa o PCA + UMAP),
-clustering (experimentar o generar `modelo.pkl` con la entrada de
-`Clustering_jerarquico/config.json`), experimentos (banco de pruebas, bootstrap y
-figuras de la memoria) e instancia nueva, que de momento solo funciona con TF-IDF o SVD.
+Tiene seis opciones: preprocesar, análisis de los datos (ausentes, longitudes,
+duplicados e idiomas, a partir de los XML o de `output/data.csv`), vectorizar
+(TF-IDF, SVD, RoBERTa o PCA + UMAP), clustering (experimentar o generar el modelo
+con la entrada de `Clustering_jerarquico/config.json`), experimentos (banco de
+pruebas, bootstrap y figuras de la memoria) e instancia nueva, que asigna un texto
+a un cluster con esa misma entrada (TF-IDF, SVD o RoBERTa + UMAP).
 
 ## Empezar con los experimentos
 
@@ -73,11 +75,13 @@ python -m vectorizacion --salida resultados_prueba --quitar-vacias --sublinear-t
 python -m vectorizacion.svd --entrada resultados_prueba --dimensiones 100
 python -m Clustering_jerarquico experimentar --entrada resultados_prueba_svd100
 python -m experimentos --entrada resultados_prueba_svd100
-python -m Clustering_jerarquico modelo --entrada resultados_prueba_svd100
+python -m Clustering_jerarquico modelo --entrada resultados_prueba_svd100 --salida resultados_prueba_modelo --archivo modelo.pkl
 ```
 
 El preprocesamiento tarda un par de minutos; el resto, segundos. Cada paso deja
-su carpeta de resultados y el siguiente la lee.
+su carpeta de resultados y el siguiente la lee. El último entrena el
+`mejor_modelo` de `config.json`; `--salida` y `--archivo` evitan que pise el
+modelo final de `resultados_clustering_completo/`.
 
 ## Consultar un texto nuevo
 
@@ -85,7 +89,14 @@ Con el modelo ya entrenado, asigna un texto a un cluster y enseña los usuarios
 más parecidos dentro de él:
 
 ```powershell
-python -m experimentos.consultar "I cannot stop gambling" --entrada resultados_prueba_svd100 --grafico consulta.png
+python -m experimentos.consultar "I cannot stop gambling" --entrada resultados_prueba_svd100 --modelo resultados_prueba_modelo/modelo.pkl --grafico consulta.png
+```
+
+Con el modelo final de la memoria (RoBERTa + UMAP, Ward, coseno, k = 2), que
+necesita además `vectorizacion_densa/requirements.txt`:
+
+```powershell
+python -m experimentos.consultar "I lost all my savings betting on football and I cannot stop" --entrada resultados_roberta/datos_completos/roberta/PCA_umap_0.9_0.5 --modelo resultados_clustering_completo/modelo_roberta.pkl
 ```
 
 El gráfico sitúa a cada usuario por su **distancia real** al texto, sin proyectar
@@ -102,4 +113,11 @@ Instala también las dependencias de `vectorizacion/requirements.txt` y ejecuta:
 .\.venv\Scripts\python.exe -m unittest discover -s vectorizacion -t .
 .\.venv\Scripts\python.exe -m unittest discover -s experimentos -t .
 .\.venv\Scripts\python.exe -m unittest discover -s Clustering_jerarquico -t .
+```
+
+Las del preprocesador usan pytest (está en `preprocesador/requirements.txt`).
+Con todas las dependencias instaladas, `pytest` lanza las de todos los paquetes:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
 ```

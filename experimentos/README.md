@@ -140,6 +140,12 @@ python -m experimentos.consultar "I have a gambling addiction and I relapsed aga
 El texto cae en el cluster 6, con 137 usuarios.
 ```
 
+Con el modelo final de la memoria (2.344 usuarios, Ward, coseno, k = 2):
+
+```powershell
+python -m experimentos.consultar "I lost all my savings betting on football and I cannot stop" --entrada resultados_roberta/datos_completos/roberta/PCA_umap_0.9_0.5 --modelo resultados_clustering_completo/modelo_roberta.pkl
+```
+
 El texto recorre la misma cadena que los datos de entrenamiento: se embebe con
 Roberta y se pasa por el `reductor.joblib` (escalado → PCA → UMAP) antes de
 preguntarle al modelo.
@@ -155,26 +161,29 @@ La primera consulta descarga `roberta-large` (1,4 GB) a la caché de Hugging
 Face. Y hace falta un modelo entrenado sobre esa misma carpeta: el `modelo.pkl`
 de TF-IDF no vale y se rechaza por dimensiones.
 
-**Hace falta Python 3.12**, el mismo con el que se generó el reductor. El
-`.joblib` lleva bytecode de numba dentro y ninguna otra versión lo ejecuta:
+**La versión de Python importa.** El reductor se generó con Python 3.12 y el
+`.joblib` lleva dentro las distancias de UMAP compiladas por numba con esa
+versión; con otra, numba falla al transformar. Como son funciones de
+`umap.distances`, `cargar_reductor` las cambia al abrirlo por las del Python que
+se esté usando (`recompilar_distancias`). Lo ajustado (escalado, PCA y el
+embedding de UMAP) no se toca, así que el modelo y los resultados son los mismos:
 
 | Python | |
 |---|---|
-| 3.10 | `code expected at most 16 arguments, got 18` al cargar |
-| 3.11 | carga, pero `AssertionError` al transformar |
+| 3.10 | `code expected at most 16 arguments, got 18` al cargar: se asigna por vecinos |
+| 3.11 | sin probar con el arreglo (sin él cargaba, pero daba `AssertionError` al transformar) |
 | **3.12** | **funciona** |
-| 3.13 | carga, pero `IndexError` al transformar |
+| **3.13** | **funciona** con el arreglo (sin él, `IndexError` al transformar) |
 
-El README de la raíz dice «3.10 o superior»; para esta parte no vale.
-
-Si el reductor no se puede abrir no falla: avisa y asigna por los 15 vecinos más
-cercanos en el espacio de Roberta de 1024 dimensiones, heredando el cluster que
-más se repita. Acierta menos. Medido sobre 60 usuarios de entrenamiento, de los
-que ya sabemos su cluster:
+Si aun así el reductor no se puede abrir o falla al transformar, la consulta no
+falla: avisa y asigna por los 15 vecinos más cercanos en el espacio de Roberta
+de 1024 dimensiones, heredando el cluster que más se repita. Acierta menos.
+Medido sobre usuarios de entrenamiento, de los que ya sabemos su cluster:
 
 | ruta | acierta |
 |---|---|
-| Roberta → reductor → modelo | **57 de 60 (95%)** |
+| Roberta → reductor → modelo, Python 3.12 | **57 de 60 (95%)** |
+| Roberta → reductor → modelo, Python 3.13 con el arreglo | **190 de 200 (95%)** |
 | vecinos en 1024 dimensiones | 52 de 60 (87%) |
 
 **Ojo con los textos cortos.** Los vectores de usuario son la media de cientos

@@ -214,7 +214,9 @@ class ModeloEntrenado:
         return np.argmin(coste, axis=1)
 
     def resumen(self) -> str:
-        """Post: texto con la configuración, los tamaños de cluster y las métricas del modelo."""
+        """Pre:  el modelo viene de entrenar_modelo (metricas tiene silhouette, davies_bouldin,
+              calinski_harabasz y cofenetica).
+        Post: texto con la configuración, los tamaños de cluster y las métricas del modelo."""
         m = self.metricas
         return (f"Enlace: {self.enlace} | distancia: {self.distancia} | k = {self.k}\n"
                 f"Instancias: {self.X.shape[0]} | atributos: {self.X.shape[1]}\n"

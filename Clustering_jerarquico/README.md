@@ -11,6 +11,8 @@ Clustering_jerarquico/
 ├── metricas.py       # silhouette, cofenética, Davies-Bouldin, Calinski-Harabasz, ARI
 ├── experimentos.py   # búsqueda del mejor k para cada distancia y enlace, tabla y sugerencia
 ├── plots.py          # dendrograma, métricas por k y proyección MDS
+├── validacion.py     # compara nuestro árbol con el de scipy en todos los cortes
+├── test_algoritmo.py
 ├── config.json
 └── requirements.txt
 ```
@@ -22,7 +24,7 @@ Clustering_jerarquico/
   `pip install -r Clustering_jerarquico/requirements.txt`.
 - El paquete `vectorizacion` al lado de este, porque la matriz se carga con
   `vectorizacion.matrices.cargar_matriz`. La entrada es una carpeta con `X.npz` (dispersa, TF-IDF) o
-  `X.npy` (densa, SVD).
+  `X.npy` (densa: SVD o RoBERTa + UMAP).
 - Se guarda la matriz de distancias completa (n x n), así que no está pensado para decenas de miles de instancias.
 
 ## Uso
@@ -34,11 +36,19 @@ python -m Clustering_jerarquico                 # pregunta: 1) experimentar  2) 
 python -m Clustering_jerarquico experimentar
 python -m Clustering_jerarquico modelo
 python -m Clustering_jerarquico experimentar --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_completo_svd95pct --salida resultados_clustering_svd95pct
+python -m Clustering_jerarquico modelo --entrada resultados_tfidf/datos_1_a_600/resultados_tfidf_completo_svd95pct --salida resultados_clustering_svd95pct --archivo modelo.pkl
+python -m Clustering_jerarquico.validacion      # nuestro árbol frente al de scipy, con los 598 usuarios
 ```
 
 1. **experimentar**: para cada distancia y enlace ajusta el árbol una vez, busca el mejor k con cada criterio, imprime una tabla y sugiere el bloque `mejor_modelo`.
 2. Elegimos el modelo y lo escribimos en `mejor_modelo` de `config.json`.
-3. **modelo**: entrena esa configuración y guarda `<salida>/modelo.pkl`.
+3. **modelo**: entrena esa configuración y guarda `<salida>/<archivo>`. El nombre sale de `mejor_modelo.archivo`
+   (ahora `modelo_roberta.pkl`) salvo que se pase `--archivo`: úsalo si cambias de entrada, para no pisar el modelo final.
+
+La validación corta el árbol en todos los k (de 2 a n − 1) para las cinco combinaciones Ward/euclídea,
+Ward/coseno y single/complete/average con coseno, comprueba las distancias Manhattan, Chebyshev y Minkowski y
+deja el informe en `resultados_clustering_completo/validacion.html`. Los cortes «por empate» no son errores: dos
+fusiones a la misma altura se pueden ordenar de las dos formas.
 
 ## Flujo de datos
 

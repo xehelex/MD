@@ -33,6 +33,12 @@ from .svd import huella
 
 
 def leer_particion(entrada, particion):
+    """Lee la matriz y los usuarios de una partición histórica (train o test).
+
+    Pre:  entrada (Path) tiene X_<particion>.npz y usuarios_<particion>.json.
+    Post: (X en CSR, usuarios) comprobados: matriz real, finita y no vacía y un usuario por
+          fila con fila == posición. ValueError si no.
+    """
     X = sparse.load_npz(entrada / f"X_{particion}.npz").tocsr()
     usuarios = json.loads((entrada / f"usuarios_{particion}.json").read_text(encoding="utf-8"))
     if X.ndim != 2 or min(X.shape) < 1 or X.dtype.kind not in "fiu" or not np.isfinite(X.data).all():
@@ -47,6 +53,13 @@ def leer_particion(entrada, particion):
 
 
 def preparar(entrada, referencia, salida):
+    """Junta train y test y los reordena con los usuarios y el orden de la referencia.
+
+    Pre:  entrada es una carpeta histórica (X_train/X_test, usuarios_*, vectorizador.joblib y
+          resumen.json), referencia tiene X y usuarios.json, y salida no existe o está vacía.
+    Post: en salida quedan X.npz alineado, vectorizador.joblib, usuarios.json y resumen.json;
+          devuelve el resumen. ValueError si faltan usuarios o hay IDs duplicados.
+    """
     entrada, referencia, salida = Path(entrada), Path(referencia), Path(salida)
     if salida.exists() and (not salida.is_dir() or any(salida.iterdir())):
         raise ValueError("La salida debe ser una carpeta nueva o vacía.")
@@ -95,6 +108,12 @@ def preparar(entrada, referencia, salida):
 
 
 def main(argv=None):
+    """Punto de entrada: python -m vectorizacion.preparar_historicos --entrada ...
+
+    Pre:  argumentos de la línea de comandos (ver --help).
+    Post: como preparar, con salida <entrada>_historico_alineado por defecto; si algo falla,
+          termina con el error de argparse.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--entrada", type=Path, required=True, help="Carpeta histórica con train y test.")
     parser.add_argument("--referencia", type=Path, default=Path("resultados_tfidf/datos_1_a_600/resultados_tfidf_completo"))

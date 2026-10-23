@@ -41,6 +41,11 @@ from .matrices import cargar_matriz, cargar_usuarios
 
 
 def huella(archivo):
+    """SHA-256 de un fichero, leído por bloques de 1 MB.
+
+    Pre:  archivo existe y se puede leer.
+    Post: el hash en hexadecimal.
+    """
     digest = hashlib.sha256()
     with Path(archivo).open("rb") as f:
         for bloque in iter(lambda: f.read(1024 * 1024), b""):
@@ -49,7 +54,13 @@ def huella(archivo):
 
 
 def reducir(entrada, salida, dimensiones=100, semilla=42):
-    """Ajusta sobre todos los usuarios; conserva las filas y nunca sobrescribe."""
+    """Ajusta sobre todos los usuarios; conserva las filas y nunca sobrescribe.
+
+    Pre:  entrada tiene X.npz y usuarios.json válidos, salida no existe o está vacía,
+          1 <= dimensiones <= min(X.shape) - 1 y 0 <= semilla < 2**32.
+    Post: en salida quedan X.npy (float32, filas con norma L2), svd.joblib, usuarios.json y
+          resumen.json; devuelve el resumen. Si no se cumple la precondición, ValueError.
+    """
     entrada, salida = Path(entrada), Path(salida)
     if salida.exists() and (not salida.is_dir() or any(salida.iterdir())):
         raise ValueError("La salida debe ser una carpeta nueva o vacía.")
@@ -106,6 +117,12 @@ def reducir(entrada, salida, dimensiones=100, semilla=42):
 
 
 def main(argv=None):
+    """Punto de entrada: python -m vectorizacion.svd --entrada ... [--dimensiones N].
+
+    Pre:  argumentos de la línea de comandos (ver --help).
+    Post: como reducir, con salida <entrada>_svd<dimensiones> por defecto; imprime el resumen
+          o termina con el error de argparse.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--entrada", type=Path, required=True, help="Carpeta TF-IDF con X.npz y usuarios.json.")
     parser.add_argument("--salida", type=Path, help="Carpeta nueva o vacía; por defecto <entrada>_svd<dimensiones>.")

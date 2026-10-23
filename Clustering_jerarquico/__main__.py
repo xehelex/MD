@@ -4,7 +4,7 @@
     python -m Clustering_jerarquico experimentar   compara distancias y enlaces y busca el mejor k
     python -m Clustering_jerarquico modelo         entrena el "mejor_modelo" de config.json y guarda el .pkl
 
-La configuración está en config.json; --entrada y --salida tienen prioridad sobre ella.
+La configuración está en config.json; --entrada, --salida y --archivo tienen prioridad sobre ella.
 """
 import argparse
 import json
@@ -32,6 +32,8 @@ def main(argv=None) -> int:
     parser.add_argument("modo", nargs="?", choices=["experimentar", "modelo"])
     parser.add_argument("--entrada", default=config["entrada"], help="Carpeta con X.npz (dispersa) o X.npy (densa).")
     parser.add_argument("--salida", default=config["salida"], help="Carpeta de resultados.")
+    parser.add_argument("--archivo", default=config["mejor_modelo"].get("archivo", "modelo.pkl"),
+                        help="Con 'modelo': nombre del .pkl dentro de --salida (por defecto el de config.json).")
     args = parser.parse_args(argv)
 
     modo = args.modo
@@ -48,7 +50,7 @@ def main(argv=None) -> int:
     else:
         elegido = config["mejor_modelo"]
         modelo = entrenar_modelo(X, elegido["enlace"], elegido["distancia"], elegido["k"])
-        ruta = modelo.guardar(salida / elegido.get("archivo", "modelo.pkl"))
+        ruta = modelo.guardar(salida / args.archivo)
         print(f"{modelo.resumen()}\n\nModelo guardado en: {ruta.resolve()}")
     return 0
 

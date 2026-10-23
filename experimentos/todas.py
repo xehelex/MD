@@ -37,14 +37,28 @@ CONJUNTOS = {
 
 
 def entradas(conjunto):
-    """Rutas de las entradas de un conjunto, en el orden del lanzador."""
+    """Rutas de las entradas de un conjunto, en el orden del lanzador.
+
+    Pre:  conjunto es una clave de CONJUNTOS.
+    Post: lista de rutas dentro de resultados_tfidf/<conjunto>/, sin comprobar que existan.
+    """
     return [RAIZ_TFIDF / conjunto / carpeta for carpeta in CONJUNTOS[conjunto]]
 
 
 def main(argv=None):
+    """Lanza experimentos (python -m experimentos) con todas las entradas de un conjunto.
+
+    Pre:  argv son opciones de experimentos más --conjunto (por defecto datos_1_a_600) y
+          las carpetas del conjunto existen.
+    Post: resultados en resultados_experimentos_todas_<conjunto>, salvo que argv traiga otra
+          --salida; devuelve lo mismo que experimentos.
+    """
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--conjunto", choices=tuple(CONJUNTOS), default="datos_1_a_600")
     args, resto = parser.parse_known_args(sys.argv[1:] if argv is None else argv)
+    if "-h" in resto or "--help" in resto:   # la ayuda la pinta experimentos, que no conoce --conjunto
+        print(f"Opción propia de experimentos.todas:\n  --conjunto {{{','.join(CONJUNTOS)}}}"
+              "  conjunto de representaciones (por defecto datos_1_a_600)\n")
     argumentos = ["--salida", f"resultados_experimentos_todas_{args.conjunto}"]
     for carpeta in entradas(args.conjunto):
         argumentos.extend(["--entrada", str(carpeta)])

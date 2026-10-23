@@ -43,6 +43,9 @@ def main(argv=None):
 
     Requiere un CSV y una salida vacía. Exporta X.npz, usuarios.json, el modelo
     reutilizable y un resumen. El remuestreo corresponde al módulo de experimentos.
+
+    Pre:  --datos es el CSV del preprocesador y --salida no existe o está vacía.
+    Post: en --salida quedan X.npz, usuarios.json, el modelo reutilizable y un resumen.
     """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--datos", type=Path, default=Path("output/data_preprocesado.csv"))

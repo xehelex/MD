@@ -57,6 +57,9 @@ def reparar_entidades(texto: str) -> str:
     tipo "don" + "8217" + "t" y, lo que es peor, las negaciones se pierden.
 
     Exige el punto y coma final, asi que no toca "C#", "issue #123" ni "100 #5".
+
+    Pre:  texto es str.
+    Post: texto con las entidades rotas («#8217;», « amp;»...) reconstruidas y decodificadas.
     """
     texto = re.sub(r"\s?#(\d{2,6});", r"&#\1;", texto)
     texto = re.sub(r"(?<![&\w])\s?(amp|quot|gt|lt|nbsp);", r"&\1;", texto)
@@ -68,6 +71,10 @@ def limpiar_texto(texto: str) -> str:
 
     Conserva negaciones, cifras y puntuación; no requiere recursos de NLTK.
     El tokenizador posterior selecciona los términos para TF-IDF.
+
+    Pre:  texto es str (el TEXT o TITLE de un XML).
+    Post: texto sin URLs ni menciones (cambiadas por URLTOKEN y USERTOKEN), con can't,
+          won't y n't expandidas y los espacios normalizados.
     """
     # Primero de todo: sin esto, las sustituciones de negaciones de abajo no
     # llegan a dispararse nunca, porque el texto real dice "don #8217;t".
@@ -87,6 +94,10 @@ def cargar_historiales(carpeta: str | Path) -> list[Historial]:
 
     Requiere IDs únicos y fechas ISO válidas. Devuelve una instancia por XML.
     Excluye publicaciones sin título ni texto; falla si un usuario queda vacío.
+
+    Pre:  carpeta tiene XML de CLEF con raíz INDIVIDUAL, ID único y fechas ISO.
+    Post: un Historial por XML con sus textos limpios en orden cronológico; ValueError si no
+          hay XML, falta o se repite un ID, o un usuario se queda sin texto.
     """
     archivos = sorted(Path(carpeta).glob("*.xml"))
     if not archivos:
@@ -125,6 +136,10 @@ def cargar_historiales_csv(ruta_csv: str | Path, informe: dict | None = None) ->
     Si se proporciona informe, registra usuarios/filas excluidos por falta de
     ID o texto. Solo puede informar de usuarios presentes en este CSV, no de los
     que el preprocesador haya descartado antes de exportarlo.
+
+    Pre:  ruta_csv es el CSV del preprocesador, con subject_id y text_Clustering.
+    Post: un Historial por usuario con texto, ordenados por ID; rellena informe si se pasa.
+          FileNotFoundError si no existe el CSV; ValueError si faltan columnas o no hay texto.
     """
 
     ruta_csv = Path(ruta_csv)
@@ -228,6 +243,9 @@ def palabras_vacias_sin_negaciones() -> list[str]:
     Se importa aqui dentro y no arriba para que el modulo siga funcionando sin
     NLTK instalado mientras no se pidan stopwords. La resta de conjuntos no
     necesita saber que hay en la lista: lo que no este, no se quita.
+
+    Pre:  NLTK instalado (si falta el corpus de stopwords, se descarga).
+    Post: lista ordenada de stopwords inglesas sin las de NEGACIONES.
     """
     from nltk.corpus import stopwords
 
@@ -257,6 +275,10 @@ def crear_vectorizador(
     float32, normalizadas L2; vocabulario e IDF se aprenden al llamar a fit.
     'palabras' usa longitudes 1..ngramas; 'caracteres4' usa exactamente cuatro
     caracteres (incluidos espacios y puntuación), sin padding de palabras.
+
+    Pre:  ngramas y min_df >= 1, 0 < max_df <= 1, max_features None o >= 1 y
+          representacion 'palabras' o 'caracteres4' (esta solo con ngramas = 1 y sin quitar vacías).
+    Post: TfidfPorUsuario sin ajustar; si no se cumple la precondición, ValueError.
     """
     if ngramas < 1 or min_df < 1 or not 0 < max_df <= 1:
         raise ValueError("ngramas/min_df deben ser positivos y max_df estar en (0, 1].")

@@ -1,6 +1,14 @@
 numpy>=1.24
 scipy>=1.10
+matplotlib>=3.7
+tqdm>=4.70.1
+
+# experimentos.consultar abre el vectorizador y el SVD guardados (joblib + sklearn)
+# y limpia el texto nuevo con el preprocesador, igual que al entrenar
+joblib>=1.3
+scikit-learn>=1.3
+-r ../preprocesador/requirements.txt
 
 # Para consultar un texto nuevo sobre la representacion densa hacen falta
-# ademas torch y transformers: estan en requirements-densa.txt, aparte para no
-# obligar a bajarlos a quien solo usa el banco de pruebas.
+# ademas torch, transformers y umap-learn: estan en vectorizacion_densa/requirements.txt,
+# aparte para no obligar a bajarlos a quien solo usa el banco de pruebas.

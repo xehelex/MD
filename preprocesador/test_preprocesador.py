@@ -11,42 +11,30 @@ def test_remove_url():
 
 
 def test_remove_html_tags():
-    texto = "<p>Hola <b>mundo</b></p>"
+    texto = "<p>Hola <b>mundo</b></p> &amp; adiós"
 
     resultado = Preprocesador._remove_html_tags(texto)
 
-    assert resultado == "Hola mundo"
-
-
-def test_remove_punc():
-    texto = "Hola, mundo!"
-
-    resultado = Preprocesador._remove_punc(
-        texto,
-        ",!"
-    )
-
-    assert resultado == "Hola  mundo "
+    # Las etiquetas se cambian por espacios para no pegar palabras; los espacios sobran después
+    assert resultado.split() == ["Hola", "mundo", "&", "adiós"]
 
 
 def test_chat_conversion():
-    texto = "LOL"
+    tokens = ["lol", "ok"]
 
     chat_words = {
-        "LOL": "laughing out loud"
+        "lol": "laughing out loud"
     }
 
     resultado = Preprocesador._chat_conversion(
-        texto,
+        tokens,
         chat_words
     )
 
-    assert resultado == "laughing out loud"
+    assert resultado == ["laughing out loud", "ok"]
 
 
 def test_negaciones_en():
-    texto = "I don't like it"
-
-    resultado = Preprocesador._negaciones_en(texto)
-
-    assert resultado == "I dont like it"
+    assert Preprocesador._negaciones_en("I don't like it") == "I do not like it"
+    assert Preprocesador._negaciones_en("i can't and i won't") == "i can not and i will not"
+    assert Preprocesador._negaciones_en("it's fine") == "it fine"

@@ -23,11 +23,14 @@ SIN_REDUCCION = "sin_reduccion"
 
 
 def cargar_config(ruta=CONFIG) -> dict:
-    """Lee config.json y comprueba los parámetros de la reducción.
+    """
+    Lee config.json y comprueba los parámetros de la reducción.
 
-    Pre:  ruta es un JSON con conjunto, modelo, reduccion y conjuntos.
-    Post: el diccionario leído. Lanza ValueError si la varianza no está entre 0 y 1
-          o min_dist no está en [0, 1].
+    Precondiciones:
+        - ruta es una ruta válida a un archivo JSON que contiene la estructura con conjunto, modelo, reduccion y conjuntos.
+
+    Postcondiciones:
+        - Retorna el diccionario leído con la configuración. Lanza un ValueError si la varianza no se encuentra entre 0 y 1, o si min_dist no está en el rango [0, 1].
     """
     config = json.loads(Path(ruta).read_text(encoding="utf-8"))
     reduccion = config["reduccion"]
@@ -39,20 +42,41 @@ def cargar_config(ruta=CONFIG) -> dict:
 
 
 def nombre_reduccion(reduccion: dict) -> str:
-    """Pre: reduccion tiene varianza y min_dist.  Post: nombre de la carpeta, por ejemplo PCA_umap_0.9_0.0."""
+    """
+    Genera el nombre identificativo de la carpeta según los parámetros de reducción.
+
+    Precondiciones:
+        - reduccion es un diccionario que contiene las claves 'varianza' y 'min_dist'.
+
+    Postcondiciones:
+        - Retorna una cadena con el formato de nombre de la carpeta (ej. PCA_umap_0.9_0.0).
+    """
     return f"PCA_umap_{float(reduccion['varianza'])}_{float(reduccion['min_dist'])}"
 
 
 def carpeta_modelo(conjunto: str, modelo: str) -> Path:
-    """Pre: conjunto y modelo son nombres de carpeta.  Post: resultados_roberta/<conjunto>/<modelo>."""
+    """
+    Construye y retorna la ruta del directorio correspondiente a un conjunto y modelo específicos.
+
+    Precondiciones:
+        - conjunto y modelo son cadenas de texto que representan nombres de carpetas válidos.
+
+    Postcondiciones:
+        - Retorna un objeto Path que apunta a resultados_roberta/<conjunto>/<modelo>.
+    """
     return RESULTADOS / conjunto / modelo
 
 
 def construir_reductor(n_usuarios, varianza=0.90, componentes=15, vecinos=30, min_dist=0.0, semilla=42):
-    """Escalado -> PCA -> UMAP empaquetado en un Pipeline de scikit-learn.
+    """
+    Construye un pipeline de scikit-learn que encadena escalado, PCA y UMAP.
 
-    Pre:  n_usuarios >= 2 y 0 < varianza < 1.
-    Post: Pipeline sin ajustar; fit_transform devuelve una matriz (n_usuarios, componentes).
+    Precondiciones:
+        - n_usuarios es un entero mayor o igual a 2.
+        - 0 < varianza < 1.
+
+    Postcondiciones:
+        - Retorna un objeto Pipeline de scikit-learn sin ajustar, configurado para transformar los datos a la dimensionalidad indicada.
     """
     return Pipeline([
         ("escalado", StandardScaler()),
@@ -68,11 +92,15 @@ def construir_reductor(n_usuarios, varianza=0.90, componentes=15, vecinos=30, mi
 
 
 def guardar(carpeta: Path, X, ids, n_posts, config_usada: dict):
-    """Guarda una representación con el mismo formato que las de TF-IDF.
+    """
+    Guarda la representación y metadatos de los embeddings en el disco con un formato estructurado.
 
-    Pre:  X tiene una fila por usuario de ids y n_posts, en el mismo orden.
-    Post: carpeta con X.npy, user_embeddings.npz, usuarios.json (con la fila de cada usuario)
-          y config.json con los parámetros usados.
+    Precondiciones:
+        - carpeta es un objeto Path válido.
+        - X posee una fila por cada usuario de ids y n_posts, guardando estricta correspondencia en el orden.
+
+    Postcondiciones:
+        - Se crean o actualizan los archivos X.npy, user_embeddings.npz, usuarios.json y config.json dentro de la carpeta de destino.
     """
     carpeta.mkdir(parents=True, exist_ok=True)
     np.save(carpeta / "X.npy", np.asarray(X, dtype=np.float32), allow_pickle=False)
@@ -83,12 +111,15 @@ def guardar(carpeta: Path, X, ids, n_posts, config_usada: dict):
 
 
 def reducir(conjunto: str, modelo: str, reduccion: dict) -> Path:
-    """Aplica PCA + UMAP a los embeddings sin reducir de un conjunto y un modelo.
+    """
+    Aplica el proceso de reducción dimensional PCA + UMAP a los embeddings sin reducir de un conjunto y modelo dados.
 
-    Pre:  existe resultados_roberta/<conjunto>/<modelo>/sin_reduccion/user_embeddings.npz
-          y reduccion tiene varianza, min_dist, componentes, vecinos y semilla.
-    Post: carpeta PCA_umap_<varianza>_<min_dist> con la matriz reducida y reductor.joblib
-          (para transformar usuarios nuevos). Devuelve su ruta.
+    Precondiciones:
+        - Debe existir el archivo user_embeddings.npz en la ruta resultados_roberta/<conjunto>/<modelo>/sin_reduccion.
+        - El diccionario reduccion debe contener las claves varianza, min_dist, componentes, vecinos y semilla.
+
+    Postcondiciones:
+        - Genera la carpeta con la matriz reducida y el archivo reductor.joblib, y retorna la ruta resultante.
     """
     base = carpeta_modelo(conjunto, modelo) / SIN_REDUCCION
     if not (base / "user_embeddings.npz").is_file():
@@ -113,6 +144,15 @@ def reducir(conjunto: str, modelo: str, reduccion: dict) -> Path:
 
 
 def main(argv=None):
+    """
+    Función principal que procesa los argumentos de la línea de comandos y coordina la ejecución de la reducción dimensional.
+
+    Precondiciones:
+        - Existencia del archivo de configuración global accesible.
+
+    Postcondiciones:
+        - Ejecuta la reducción dimensional sobre los datos del conjunto y modelo especificados, gestionando posibles errores de archivos faltantes.
+    """
     config = cargar_config()
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--conjunto", default=config["conjunto"], choices=list(config["conjuntos"]))

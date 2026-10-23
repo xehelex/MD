@@ -22,7 +22,21 @@ RE_PALABRA = re.compile(r"[^\W_]+(?:-[^\W_]+)*")                        # letras
 APOSTROFES = str.maketrans({"’": "'", "‘": "'", "´": "'", "`": "'"})
 
 class Preprocesador:
-    def __init__(self, args, chat_words_path="./chat_words.json"):
+    """
+    Clase encargada de la carga, limpieza, normalización y lematización de textos
+    provenientes de archivos XML para clustering.
+    """
+    def __init__(self, args, chat_words_path=Path(__file__).resolve().parent / "chat_words.json"):
+        """
+        Constructor de la clase Preprocesador.
+
+        Precondiciones:
+            - args debe ser un diccionario con los parámetros de configuración ('idioma', 'min_tokens', 'max_tokens'...).
+            - chat_words_path debe ser una ruta válida (o inexistente manejada con seguridad) hacia un JSON de abreviaturas.
+
+        Postcondiciones:
+            - Se inicializan los recursos de NLTK, las estructuras de stopwords, los lematizadores y los atributos de configuración.
+        """
         self._descargar_nltk()
         self.args = args
         self.chat_words = self._cargar_chat_words(chat_words_path)
@@ -49,6 +63,15 @@ class Preprocesador:
     # region Métodos de CARGA
     @staticmethod
     def _descargar_nltk():
+        """
+        Verifica y descarga los recursos necesarios de NLTK si no se encuentran disponibles.
+
+        Precondiciones:
+            - Conexión a internet disponible en caso de requerir descarga.
+
+        Postcondiciones:
+            - Los paquetes requeridos de NLTK quedan accesibles en el entorno local.
+        """
         nltks = [
             ('averaged_perceptron_tagger_eng', 'taggers/averaged_perceptron_tagger_eng'),
             ('punkt_tab', 'tokenizers/punkt_tab'),
@@ -63,7 +86,15 @@ class Preprocesador:
 
     @staticmethod
     def _cargar_chat_words(json_path):
-        """Carga las abreviaturas si son solo de 1 palabra y no se consideran stopwords"""
+        """
+        Carga las abreviaturas informales desde un archivo JSON.
+
+        Precondiciones:
+            - json_path es una cadena o Path que apunta a un fichero JSON con pares clave-valor de abreviaturas.
+
+        Postcondiciones:
+            - Retorna un diccionario con las abreviaturas en minúsculas de una sola palabra, excluyendo stopwords ambiguas.
+        """
         path = Path(json_path)
         if not path.exists():
             print(f"No se ha encontrado {json_path}. Se usará un diccionario vacío.")
@@ -78,6 +109,15 @@ class Preprocesador:
 
     @staticmethod
     def _cargar_data(directorio):
+        """
+        Lee y procesa todos los archivos XML contenidos en el directorio indicado.
+
+        Precondiciones:
+            - directorio debe ser una ruta válida que contenga archivos XML con la estructura esperada (sujeto, ID, WRITING, TITLE, DATE, TEXT, INFO).
+
+        Postcondiciones:
+            - Retorna un DataFrame de Pandas con las columnas: subject_id, title, date, text, info, con fechas parseadas.
+        """
         dir_data = Path(directorio)
         publicaciones = []
 
@@ -103,6 +143,15 @@ class Preprocesador:
 
     @staticmethod
     def _texto_crudo(df):
+        """
+        Concatena el título y el texto de cada registro en el DataFrame.
+
+        Precondiciones:
+            - df es un DataFrame que contiene las columnas 'title' y 'text'.
+
+        Postcondiciones:
+            - Retorna una Serie de Pandas con los textos combinados y limpios de espacios extremos.
+        """
         # Obtener título y texto
         titulo = df["title"].fillna("").str.strip()
         texto = df["text"].fillna("").str.strip()
@@ -116,20 +165,56 @@ class Preprocesador:
     # region Métodos de LIMPIEZA-TRANSFORMACIÓN
     @staticmethod
     def _remove_html_tags(text):
+        """
+        Elimina etiquetas y entidades HTML de una cadena de texto.
+
+        Precondiciones:
+            - text es de tipo str.
+
+        Postcondiciones:
+            - Retorna el texto sin etiquetas HTML ni entidades codificadas.
+        """
         text = html.unescape(text) # para entidades HTML: &lt...
         return RE_HTML.sub(" ", text)
 
     @staticmethod
     def _remove_url(text):
+        """
+        Elimina URLs de una cadena de texto.
+
+        Precondiciones:
+            - text es de tipo str.
+
+        Postcondiciones:
+            - Retorna el texto sin URLs detectadas.
+        """
         return RE_URL.sub(" ", text)
 
     @staticmethod
     def _chat_conversion(tokens, chat_words):
+        """
+        Reemplaza abreviaturas de chat por su forma extendida en una lista de tokens.
+
+        Precondiciones:
+            - tokens es una lista de strings.
+            - chat_words es un diccionario de mapeo de abreviaturas.
+
+        Postcondiciones:
+            - Retorna la lista de tokens con las abreviaturas reemplazadas.
+        """
         return [chat_words.get(t, t) for t in tokens]
 
     @staticmethod
     def _negaciones_en(text):
-        """Negaciones a not y fuera el resto de sufijos"""
+        """
+        Normaliza las contracciones de negación en inglés.
+
+        Precondiciones:
+            - text es de tipo str.
+
+        Postcondiciones:
+            - Retorna el texto con las negaciones expandidas (can't -> can not) y apóstrofes auxiliares eliminados.
+        """
         text = re.sub(r"\bcan(?:'t|not)\b", "can not", text) # can't, cannot
         text = re.sub(r"\bwon't\b", "will not", text) # won't
         text = re.sub(r"\bain't\b", "is not", text) # ain't
@@ -140,14 +225,30 @@ class Preprocesador:
 
     # region Métodos de NORMALIZACIÓN
     def _normalize_text(self, text):
-        """Minúsculas, apóstrofes a mismo formato, negaciones (EN) """
+        """
+        Normaliza el texto convirtiéndolo a minúsculas, unificando apóstrofes y reduciendo alargamientos de letras.
+
+        Precondiciones:
+            - text es de tipo str.
+
+        Postcondiciones:
+            - Retorna el texto normalizado.
+        """
         text = text.lower().translate(APOSTROFES)  # minúsculas y apóstrofos curvos -> rectos
         if "'" in text:
             text = self._negaciones_en(text)  # (en español no afecta)
         return RE_ALARGA.sub(r"\1\1", text)  # soooo -> soo
 
     def _detectar_idioma(self, tokens):
-        """Cuenta palabras de cada idioma"""
+        """
+        Detecta si el idioma predominante de los tokens es español o inglés.
+
+        Precondiciones:
+            - tokens es una lista de strings.
+
+        Postcondiciones:
+            - Retorna 'spanish' o 'english' según la frecuencia de palabras exclusivas.
+        """
         muestra = tokens[:60]
         en = sum(t in self.solo_en for t in muestra)
         es = sum(t in self.solo_es for t in muestra)
@@ -157,11 +258,29 @@ class Preprocesador:
 
     # region Métodos de LEMATIZACIÓN
     def _lemma_en(self, palabra):
-        """Lematiza como sustantivo y si no cambia, como verbo"""
+        """
+        Lematiza una palabra en inglés probando primero como sustantivo y luego como verbo.
+
+        Precondiciones:
+            - palabra es de tipo str.
+
+        Postcondiciones:
+            - Retorna el lema correspondiente en inglés.
+        """
         lema = self.lemmatizer.lemmatize(palabra, "n")
         return lema if lema != palabra else self.lemmatizer.lemmatize(palabra, "v")
 
     def _lemmatize(self, doc, language):
+        """
+        Aplica lematización (inglés) o stemming (español) a una lista de tokens según el idioma.
+
+        Precondiciones:
+            - doc es una lista de strings.
+            - language es un string ('english' o 'spanish').
+
+        Postcondiciones:
+            - Retorna una lista de tokens lematizados/raíces.
+        """
         if language == "english":
             return [self._lema(t) for t in doc]
         return [self._raiz(t) for t in doc]  # español: stemming (NLTK no lematiza español)
@@ -169,7 +288,15 @@ class Preprocesador:
 
     # region Pipeline General
     def _procesar_texto(self, doc):
-        """Devuelve la lista de tokens, o None si se descarta."""
+        """
+        Ejecuta el pipeline completo de limpieza, filtrado y lematización sobre un texto individual.
+
+        Precondiciones:
+            - doc es una cadena de texto (str).
+
+        Postcondiciones:
+            - Retorna una lista de tokens procesados o None si el texto no cumple con los criterios de longitud mínima.
+        """
         doc = doc[: self.max_tokens * 20]  # Recorte para textos muy largos
 
         # 1. Limpiar HTML, URL y menciones
@@ -202,7 +329,15 @@ class Preprocesador:
         return self._lemmatize(tokens, lan)
 
     def _pipeline_limpieza_texto(self, data):
-        """Los textos distintos se procesan una vez y a partir del diccionario se actualizan todos"""
+        """
+        Procesa de forma optimizada los textos únicos de un DataFrame mediante el pipeline de texto.
+
+        Precondiciones:
+            - data es un DataFrame que contiene la columna 'texto_crudo'.
+
+        Postcondiciones:
+            - Retorna el DataFrame con una nueva columna 'text_Clustering' con los tokens procesados.
+        """
         unicos = data["texto_crudo"].unique()
         resultados = {}
 
@@ -213,6 +348,15 @@ class Preprocesador:
         return data
 
     def preprocesar_datos_clustering(self):
+        """
+        Ejecuta el flujo completo de preprocesamiento de datos para clustering, incluyendo carga, limpieza y exportación opcional.
+
+        Precondiciones:
+            - self.args debe contener la clave 'datos' con la ruta al directorio de entrada.
+
+        Postcondiciones:
+            - Actualiza y retorna el DataFrame procesado (self.df), eliminando vacíos y duplicados, y opcionalmente guarda los resultados en CSV.
+        """
         self.df_original = self._cargar_data(self.args["datos"])
         df = self.df_original.copy()
 

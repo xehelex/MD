@@ -16,12 +16,6 @@ RE_ESPACIOS = re.compile(r"[\s\u200b]+")
 class RobertaPorUsuario:
     """
     Genera un embedding por post con RoBERTa y los agrega por usuario (media).
-
-    Entrada (CSV): subject_id, title, text   (el resto de columnas se ignoran)
-
-    Tras fit_transform() quedan disponibles:
-        self.post_embeddings -> matriz (posts, dim), mismo orden que post_df
-        self.user_embeddings -> matriz (usuarios, dim), mismo orden que user_df
     """
 
     def __init__(self,
@@ -32,6 +26,16 @@ class RobertaPorUsuario:
         preprocess=True,
         normalizar = False
     ):
+        """
+        Constructor de la clase RobertaPorUsuario.
+
+        Precondiciones:
+            - data_path es una ruta válida al archivo CSV de entrada.
+            - model_name corresponde a un identificador válido de modelo en Hugging Face.
+
+        Postcondiciones:
+            - Se configuran los parámetros de ejecución, se detecta el dispositivo disponible (GPU/CPU) y se cargan el tokenizador y el modelo correspondiente.
+        """
         self.data_path = Path(data_path)
         self.model_name = model_name
         self.batch_size = batch_size
@@ -59,8 +63,13 @@ class RobertaPorUsuario:
 
     def clean_text(self, text):
         """
-        Limpieza ligera. NO quita stopwords, negaciones ni lematiza:
-        RoBERTa necesita el texto natural para entender el contexto.
+        Realiza una limpieza ligera del texto sin eliminar stopwords, negaciones ni aplicar lematización.
+
+        Precondiciones:
+            - text es de tipo str.
+
+        Postcondiciones:
+            - Retorna el texto depurado de espacios sobrantes y opcionalmente libre de URLs, etiquetas HTML y menciones si está activado el preprocesamiento.
         """
         text = text.strip()
 
@@ -73,7 +82,15 @@ class RobertaPorUsuario:
         return text
 
     def load_data(self):
-        """Lee el CSV y devuelve un DataFrame con subject_id y text."""
+        """
+        Lee el archivo CSV de datos y extrae un DataFrame filtrado con los identificadores de usuario y textos útiles.
+
+        Precondiciones:
+            - self.data_path apunta a un archivo CSV accesible con las columnas requeridas (subject_id, title, text).
+
+        Postcondiciones:
+            - Retorna un DataFrame indexado nuevamente que contiene únicamente registros con texto y sujetos válidos. Lanza un ValueError si el resultado está vacío.
+        """
 
         # Solo las columnas necesarias; los vacíos quedan como "" (no NaN)
         df = pd.read_csv(
@@ -107,7 +124,16 @@ class RobertaPorUsuario:
 
     @torch.inference_mode()
     def _encode_chunk(self, texts, pbar):
-        """Media de los embeddings de tokens de cada texto (ignora el padding)."""
+        """
+        Calcula la media de los embeddings de los tokens de cada lote de textos ignorando el padding.
+
+        Precondiciones:
+            - texts es una lista de cadenas de texto.
+            - pbar es una instancia activa de tqdm para la barra de progreso.
+
+        Postcondiciones:
+            - Retorna un arreglo de numpy con los embeddings codificados y opcionalmente normalizados.
+        """
         resultados = []
 
         for i in range(0, len(texts), self.batch_size):
@@ -137,6 +163,15 @@ class RobertaPorUsuario:
         return torch.cat(resultados).numpy()
 
     def encode_posts(self, texts):
+        """
+        Codifica una lista completa de textos ordenándolos por longitud para optimizar el procesamiento por lotes.
+
+        Precondiciones:
+            - texts es una lista de strings.
+
+        Postcondiciones:
+            - Retorna una matriz de numpy con los embeddings de los posts devueltos a su orden original.
+        """
         orden = np.argsort([-len(t) for t in texts], kind="stable")
         with tqdm(total=len(texts), unit="post") as pbar:
             emb = self._encode_chunk([texts[i] for i in orden], pbar)
@@ -150,7 +185,16 @@ class RobertaPorUsuario:
 
     @staticmethod
     def aggregate_users(subject_ids, post_embeddings):
-        """Media de los embeddings de los posts de cada usuario."""
+        """
+        Agrega los embeddings de los posts individuales por usuario calculando su media aritmética.
+
+        Precondiciones:
+            - subject_ids e iterable/serie con los identificadores de usuario correspondientes a cada post.
+            - post_embeddings es una matriz numérica con los embeddings de los posts.
+
+        Postcondiciones:
+            - Retorna un DataFrame con los usuarios y su conteo de posts (user_df), junto con la matriz de embeddings agregados por usuario.
+        """
 
         codigos, usuarios = pd.factorize(subject_ids)  # mantiene el orden de aparición
 
@@ -171,10 +215,13 @@ class RobertaPorUsuario:
 
     def fit_transform(self):
         """
-        Ejecuta el pipeline. Devuelve:
-            post_df: un registro por post (subject_id, text)
-            user_df: un registro por usuario (subject_id, n_posts)
-        Los embeddings quedan en self.post_embeddings y self.user_embeddings.
+        Ejecuta el pipeline completo de carga de datos, vectorización de posts y agregación por usuario.
+
+        Precondiciones:
+            - El modelo y el tokenizador se encuentran inicializados correctamente.
+
+        Postcondiciones:
+            - Asigna los embeddings resultantes a los atributos de instancia y retorna los DataFrames de posts y usuarios correspondientes.
         """
 
         df = self.load_data()

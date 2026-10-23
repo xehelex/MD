@@ -75,6 +75,15 @@ def calcular_embeddings(conjunto: str, modelo: str, config: dict):
 
 
 def main(argv=None):
+    """
+    Función principal encargada de coordinar la carga de configuración, la definición de argumentos de línea de comandos y el flujo de cálculo de embeddings densos y su posterior reducción dimensional.
+
+    Precondiciones:
+        - Existencia de un archivo de configuración válido y módulos requeridos disponibles en el entorno.
+
+    Postcondiciones:
+        - Se generan y guardan los embeddings densos y reducidos en el disco según los parámetros especificados.
+    """
     config = cargar_config()
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--conjunto", default=config["conjunto"], choices=list(config["conjuntos"]))

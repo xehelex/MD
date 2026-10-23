@@ -4,7 +4,10 @@ import os
 import re
 import xml.etree.ElementTree as eT
 from functools import lru_cache
+from contextlib import redirect_stdout
 
+from langdetect import detect, LangDetectException
+import matplotlib.pyplot as plt
 import pandas as pd
 from pathlib import Path
 from tqdm import tqdm
@@ -387,3 +390,108 @@ class Preprocesador:
         return self.df
 
     #endregion
+
+    # region Métodos de Análisis de Datos
+
+    def _codigo_idioma(self, texto):
+        """
+        Detecta el idioma de un texto y devuelve su código ISO correspondiente.
+
+        Precondiciones:
+            - texto es de tipo str.
+            - Las bibliotecas y funciones de limpieza (como detect, RE_USUARIO, etc.) se encuentran disponibles.
+
+        Postcondiciones:
+            - Retorna el código ISO del idioma detectado o 'und' en caso de que ocurra una excepción durante la detección.
+        """
+        texto = RE_USUARIO.sub(" ", self._remove_url(self._remove_html_tags(texto)))[:500]
+        try:
+            return detect(texto)
+        except LangDetectException:
+            return "und"
+
+    def analisis_exploratorio(self, guardar_fig=None, guardar_txt="output/analisis.txt"):
+        """
+        Ejecuta el análisis exploratorio de los datos y redirige la salida estándar para escribir los resultados en un archivo de texto.
+
+        Precondiciones:
+            - guardar_txt es una ruta de archivo válida donde se escribirán los resultados.
+
+        Postcondiciones:
+            - Se crea el directorio de destino si no existe, se guarda el informe del análisis en el archivo de texto y se retorna el resultado del análisis.
+        """
+        Path(guardar_txt).parent.mkdir(parents=True, exist_ok=True)
+        with open(guardar_txt, "w", encoding="utf-8") as f, redirect_stdout(f):
+            return self._analizar(guardar_fig)
+
+    def _analizar(self, guardar_fig=None):
+        """
+        Realiza un resumen detallado de calidad, longitudes, duplicados e idiomas del dataset, generando opcionalmente un gráfico.
+
+        Precondiciones:
+            - self.df_original o self.args['datos'] deben estar disponibles para cargar los datos en caso de ser necesario.
+
+        Postcondiciones:
+            - Imprime métricas de conteo, valores ausentes, estadísticas de longitud y distribución de idiomas, muestra o guarda el gráfico resultante y retorna el conteo de idiomas.
+        """
+        if self.df_original is None:
+            self.df_original = self._cargar_data(self.args["datos"])
+
+        df = self.df_original
+
+        texto = self._texto_crudo(df).fillna("").astype(str)
+        texto = texto[texto.str.strip().ne("")]
+
+        # Resumen y valores ausentes
+        print(f"Publicaciones: {len(df)} | Sujetos: {df['subject_id'].nunique()} | "f"Fechas: {df['date'].min()} -> {df['date'].max()}")
+        vacios = (df.isna() | df.astype(str).apply(lambda col: col.str.strip().eq(""))).sum()
+        print("\nAusentes/vacíos por columna:")
+        print(pd.DataFrame({"n": vacios, "%": (100 * vacios / len(df)).round(2)}))
+
+        # Longitudes y duplicados
+        if texto.empty:
+            print("\nNo hay textos no vacíos para calcular longitudes.")
+        else:
+            longitud = pd.DataFrame({
+                "caracteres": texto.str.len(),
+                "palabras": texto.str.split().str.len()
+            })
+            print("\nLongitud de las publicaciones:")
+            print(longitud.describe(percentiles=[.05, .5, .95]).round(1).loc[["min", "5%", "50%", "mean", "95%", "max"]])
+
+        print(f"\nTextos duplicados exactos: {texto.duplicated().sum()}")
+
+        # Idiomas: detectar solo una vez por texto único
+        mapa = {
+            t: self._codigo_idioma(t)
+            for t in tqdm(texto.unique(), desc="Detectando idioma")
+        }
+        codigos = texto.map(mapa)
+        categorias = codigos.map({"en": "Inglés", "es": "Español"}).fillna("Otro")
+        orden = ["Inglés", "Español", "Otro"]
+        conteo = categorias.value_counts().reindex(orden, fill_value=0)
+        pct = conteo.div(conteo.sum()).mul(100).fillna(0)
+
+        print("\nDistribución de idiomas:")
+        print(pd.DataFrame({"n": conteo, "%": pct.round(2)}))
+        print("\nCódigos incluidos en 'Otro' (und = no detectado):")
+        print(codigos[categorias.eq("Otro")].value_counts().head(5).to_string())
+
+        # Gráfico
+        fig, ax = plt.subplots(figsize=(6, 4))
+        barras = ax.bar(conteo.index, conteo.values, color=["blue", "orange", "gray"])
+        ax.bar_label(barras, labels=[f"{n}\n({p:.1f}%)" for n, p in zip(conteo, pct)])
+        ax.set(title="Distribución de idiomas", ylabel="Publicaciones")
+        ax.margins(y=0.15)
+        fig.tight_layout()
+
+        if guardar_fig:
+            Path(guardar_fig).parent.mkdir(parents=True, exist_ok=True)
+            fig.savefig(guardar_fig, dpi=150)
+
+        plt.show()
+        plt.close(fig)
+
+        return conteo
+
+    # endregion
